@@ -8,6 +8,11 @@ import {
   TICKET_REPOSITORY,
   type TicketRepository,
 } from '@domain/repositories/ticket.repository';
+import {
+  MESSAGE_PUBLISHER,
+  type MessagePublisher,
+} from '@domain/events/message-publisher.interface';
+import { TicketCreatedEvent } from '@domain/events/ticket-created.event';
 
 @CommandHandler(CreateTicketCommand)
 export class CreateTicketHandler implements ICommandHandler<
@@ -17,6 +22,8 @@ export class CreateTicketHandler implements ICommandHandler<
   constructor(
     @Inject(TICKET_REPOSITORY)
     private readonly ticketRepository: TicketRepository,
+    @Inject(MESSAGE_PUBLISHER)
+    private readonly messagePublisher: MessagePublisher,
   ) {}
 
   async execute(command: CreateTicketCommand): Promise<Ticket> {
@@ -32,6 +39,10 @@ export class CreateTicketHandler implements ICommandHandler<
       updatedAt: now,
     };
 
-    return this.ticketRepository.create(ticket);
+    const createdTicket = await this.ticketRepository.create(ticket);
+    const event = new TicketCreatedEvent(createdTicket);
+    this.messagePublisher.publish(event);
+
+    return createdTicket;
   }
 }
