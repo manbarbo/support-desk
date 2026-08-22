@@ -1,0 +1,7 @@
+export enum TicketSentiment {
+  POSITIVE = 'POSITIVE',
+  NEUTRAL = 'NEUTRAL',
+  NEGATIVE = 'NEGATIVE',
+  FRUSTRATED = 'FRUSTRATED',
+  ANGRY = 'ANGRY',
+}
