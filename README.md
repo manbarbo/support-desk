@@ -326,7 +326,7 @@ SUPABASE_URL=
 SUPABASE_ANON_KEY=
 DATABASE_URL=
 
-RABBITMQ_URL=amqp://guest:guest@localhost:5672
+BROKER_URL=amqp://guest:guest@localhost:5672
 
 OpenCode_API_KEY=
 ```

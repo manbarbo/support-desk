@@ -15,10 +15,10 @@ export class RabbitMQMessagePublisher
   private readonly rabbitmqUrl: string;
 
   constructor(private readonly configService: ConfigService) {
-    const rabbitmqUrl = this.configService.get<string>('RABBITMQ_URL');
+    const rabbitmqUrl = this.configService.get<string>('BROKER_URL');
 
     if (!rabbitmqUrl) {
-      throw new Error('RABBITMQ_URL is not configured');
+      throw new Error('BROKER_URL is not configured');
     }
 
     this.rabbitmqUrl = rabbitmqUrl;

@@ -12,20 +12,32 @@ export class TicketCreatedConsumer implements OnModuleInit, OnModuleDestroy {
 
   private readonly exchange = 'support.events';
   private readonly queue = 'ticket.ai.processing';
+  private readonly retryQueue = 'ticket.ai.processing.retry';
+  private readonly dlq = 'ticket.ai.processing.dlq';
   private readonly routingKey = 'ticket.created';
-  private readonly rabbitmqUrl: string;
+  private readonly maxRetries: number;
+  private readonly retryBaseDelay: number;
+  private readonly brokerUrl: string;
 
   constructor(
     private readonly configService: ConfigService,
     private readonly commandBus: CommandBus,
   ) {
-    const rabbitmqUrl = this.configService.get<string>('RABBITMQ_URL');
+    const brokerUrl = this.configService.get<string>('BROKER_URL');
 
-    if (!rabbitmqUrl) {
-      throw new Error('RABBITMQ_URL is not configured');
+    if (!brokerUrl) {
+      throw new Error('BROKER_URL is not configured');
     }
 
-    this.rabbitmqUrl = rabbitmqUrl;
+    this.brokerUrl = brokerUrl;
+    this.maxRetries = parseInt(
+      this.configService.get<string>('BROKER_MAX_RETRIES') || '3',
+      10,
+    );
+    this.retryBaseDelay = parseInt(
+      this.configService.get<string>('BROKER_RETRY_BASE_DELAY') || '5000',
+      10,
+    );
   }
 
   async onModuleInit() {
@@ -40,7 +52,7 @@ export class TicketCreatedConsumer implements OnModuleInit, OnModuleDestroy {
 
   private async connect(): Promise<void> {
     try {
-      this.connection = await amqp.connect(this.rabbitmqUrl);
+      this.connection = await amqp.connect(this.brokerUrl);
       this.channel = await this.connection.createChannel();
 
       console.log('TicketCreatedConsumer connected to RabbitMQ');
@@ -58,23 +70,43 @@ export class TicketCreatedConsumer implements OnModuleInit, OnModuleDestroy {
       throw new Error('RabbitMQ channel is not initialized');
     }
 
-    // Asegurar que el exchange existe
+    // Exchange principal
     await this.channel.assertExchange(this.exchange, 'topic', {
       durable: true,
     });
 
-    // Asegurar que la cola existe
+    // Main queue
     await this.channel.assertQueue(this.queue, {
       durable: true,
       autoDelete: false,
     });
 
-    // Enlazar la cola al exchange con el routing key
+    // Retry queue
+    // Los mensajes permanecen aquí hasta que expire su TTL.
+    // Cuando expiran, RabbitMQ los envía nuevamente a la main queue.
+    await this.channel.assertQueue(this.retryQueue, {
+      durable: true,
+      autoDelete: false,
+      arguments: {
+        'x-dead-letter-exchange': '',
+        'x-dead-letter-routing-key': this.queue,
+      },
+    });
+
+    // DLQ
+    await this.channel.assertQueue(this.dlq, {
+      durable: true,
+      autoDelete: false,
+    });
+
+    // Main queue recibe ticket.created
     await this.channel.bindQueue(this.queue, this.exchange, this.routingKey);
 
-    console.log(
-      `Queue '${this.queue}' bound to exchange '${this.exchange}' with routing key '${this.routingKey}'`,
-    );
+    console.log('Topology configured:');
+    console.log(`  - Exchange: ${this.exchange}`);
+    console.log(`  - Main queue: ${this.queue}`);
+    console.log(`  - Retry queue: ${this.retryQueue}`);
+    console.log(`  - DLQ: ${this.dlq}`);
   }
 
   private async startConsuming(): Promise<void> {
@@ -106,10 +138,16 @@ export class TicketCreatedConsumer implements OnModuleInit, OnModuleDestroy {
 
     try {
       const content = message.content.toString();
-      const event: DomainEvent = JSON.parse(content) as DomainEvent;
-      const command = new AnalyzeTicketCommand(event.aggregateId);
 
-      console.log(`Received event: ${event.eventType} (${event.eventId})`);
+      const event = JSON.parse(content) as DomainEvent;
+
+      const retryCount = this.getRetryCount(message);
+
+      console.log(
+        `Received event: ${event.eventType} (${event.eventId}) - Attempt ${retryCount + 1}/${this.maxRetries + 1}`,
+      );
+
+      const command = new AnalyzeTicketCommand(event.aggregateId);
 
       await this.commandBus.execute(command);
 
@@ -119,8 +157,111 @@ export class TicketCreatedConsumer implements OnModuleInit, OnModuleDestroy {
     } catch (error) {
       console.error('Failed to process message:', error);
 
-      this.channel.nack(message, false, true);
+      this.handleFailedMessage(
+        message,
+        error instanceof Error ? error : new Error(String(error)),
+      );
     }
+  }
+
+  private handleFailedMessage(
+    message: amqp.ConsumeMessage,
+    error: Error,
+  ): void {
+    if (!this.channel) {
+      throw new Error('RabbitMQ channel is not initialized');
+    }
+
+    const retryCount = this.getRetryCount(message);
+    const content = message.content.toString();
+
+    if (retryCount < this.maxRetries) {
+      const newRetryCount = retryCount + 1;
+      const delay = this.calculateBackoff(newRetryCount);
+
+      console.log(
+        `Retrying message ` +
+          `(attempt ${newRetryCount}/${this.maxRetries}) ` +
+          `after ${delay}ms`,
+      );
+
+      const published = this.channel.sendToQueue(
+        this.retryQueue,
+        Buffer.from(content),
+        {
+          persistent: true,
+          expiration: delay.toString(),
+          contentType: 'application/json',
+          headers: {
+            'x-retry-count': newRetryCount,
+            'x-last-error': error.message,
+            'x-last-error-at': new Date().toISOString(),
+            'x-original-queue': this.queue,
+          },
+        },
+      );
+
+      if (!published) {
+        console.error('Failed to publish message to retry queue');
+
+        return;
+      }
+
+      // El mensaje original ya está almacenado
+      // en la retry queue.
+      this.channel.ack(message);
+
+      return;
+    }
+
+    console.error(
+      `Max retries (${this.maxRetries}) reached. ` +
+        `Moving to DLQ: ${this.dlq}`,
+    );
+
+    const published = this.channel.sendToQueue(this.dlq, Buffer.from(content), {
+      persistent: true,
+      contentType: 'application/json',
+      headers: {
+        'x-retry-count': retryCount,
+        'x-last-error': error.message,
+        'x-last-error-at': new Date().toISOString(),
+        'x-original-queue': this.queue,
+      },
+    });
+
+    if (!published) {
+      console.error('Failed to publish message to DLQ');
+
+      return;
+    }
+
+    this.channel.ack(message);
+  }
+
+  private calculateBackoff(retryCount: number): number {
+    const baseDelay = this.retryBaseDelay;
+    const multiplier = Math.pow(5, retryCount - 1);
+
+    const delay = baseDelay * multiplier;
+
+    return Math.min(delay, 5 * 60 * 1000); // Máximo 5 minutos
+  }
+
+  private getRetryCount(message: amqp.ConsumeMessage): number {
+    const value: unknown = message.properties.headers?.['x-retry-count'];
+
+    if (typeof value === 'number') {
+      return value;
+    }
+
+    if (typeof value === 'string') {
+      const parsed = Number(value);
+
+      return Number.isFinite(parsed) ? parsed : 0;
+    }
+
+    return 0;
   }
 
   private async close(): Promise<void> {

@@ -1,11 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { AIProvider } from '@application/ports/ai-provider.interface';
 import { Ticket } from '@domain/entities/ticket.entity';
-import { TicketAnalysis } from '@domain/entities/ticket-analysis.entity';
-import { TicketCategory } from '@domain/enums/ticket-category.enum';
-import { TicketPriority } from '@domain/enums/ticket-priority.enum';
-import { TicketSentiment } from '@domain/enums/ticket-sentiment.enum';
 
 interface OpenCodeResponse {
   category: string;
@@ -24,7 +19,7 @@ interface OpenCodeChatCompletionResponse {
 }
 
 @Injectable()
-export class OpenCodeAdapter implements AIProvider {
+export class OpenCodeAdapter {
   private readonly apiKey: string;
   private readonly baseUrl: string;
   private readonly model: string;
@@ -43,10 +38,17 @@ export class OpenCodeAdapter implements AIProvider {
     this.model = model;
   }
 
-  async analyzeTicket(ticket: Ticket): Promise<TicketAnalysis> {
+  async getRawAnalysis(ticket: Ticket): Promise<Record<string, unknown>> {
     const prompt = this.buildPrompt(ticket);
     const response = await this.callAPI(prompt);
-    return this.mapToTicketAnalysis(ticket.id, response);
+
+    return {
+      category: response.category,
+      priority: response.priority,
+      sentiment: response.sentiment,
+      confidence: response.confidence,
+      suggestedResponse: response.suggestedResponse,
+    };
   }
 
   private buildPrompt(ticket: Ticket): string {
@@ -94,11 +96,13 @@ Respond ONLY with the JSON object, no additional text.
     });
 
     if (!response.ok) {
-      throw new Error(`OpenCode API error: ${response.statusText}`);
+      throw new Error(
+        `OpenCode API error: ${response.status} ${response.statusText}`,
+      );
     }
 
     const data = (await response.json()) as OpenCodeChatCompletionResponse;
-    const content = data.choices[0].message.content;
+    const content = data.choices[0]?.message.content;
 
     if (!content) {
       throw new Error('OpenCode returned an empty response');
@@ -110,79 +114,5 @@ Respond ONLY with the JSON object, no additional text.
       console.error('Failed to parse OpenCode response:', content, error);
       throw new Error(`Failed to parse OpenCode response: ${content}`);
     }
-  }
-
-  private mapToTicketAnalysis(
-    ticketId: string,
-    response: OpenCodeResponse,
-  ): TicketAnalysis {
-    this.validateResponseStructure(response);
-
-    return {
-      id: crypto.randomUUID(),
-      ticketId,
-      category: this.validateCategory(response.category),
-      priority: this.validatePriority(response.priority),
-      sentiment: this.validateSentiment(response.sentiment),
-      confidence: this.validateConfidence(response.confidence),
-      suggestedResponse: this.validateSuggestedResponse(
-        response.suggestedResponse,
-      ),
-      createdAt: new Date(),
-    };
-  }
-
-  private validateResponseStructure(response: OpenCodeResponse): void {
-    const requiredFields: Array<keyof OpenCodeResponse> = [
-      'category',
-      'priority',
-      'sentiment',
-      'confidence',
-      'suggestedResponse',
-    ];
-
-    for (const field of requiredFields) {
-      if (!(field in response)) {
-        throw new Error(`Missing required field in AI response: ${field}`);
-      }
-    }
-  }
-
-  private validateSuggestedResponse(value: string): string {
-    if (!value || value.trim().length === 0) {
-      throw new Error('Suggested response cannot be empty');
-    }
-    return value;
-  }
-
-  private validateCategory(value: string): TicketCategory {
-    if (!Object.values(TicketCategory).includes(value as TicketCategory)) {
-      throw new Error(`Invalid category: ${value}`);
-    }
-    return value as TicketCategory;
-  }
-
-  private validatePriority(value: string): TicketPriority {
-    if (!Object.values(TicketPriority).includes(value as TicketPriority)) {
-      throw new Error(`Invalid priority: ${value}`);
-    }
-    return value as TicketPriority;
-  }
-
-  private validateSentiment(value: string): TicketSentiment {
-    if (!Object.values(TicketSentiment).includes(value as TicketSentiment)) {
-      throw new Error(`Invalid sentiment: ${value}`);
-    }
-    return value as TicketSentiment;
-  }
-
-  private validateConfidence(value: number): number {
-    if (typeof value !== 'number' || isNaN(value)) {
-      throw new Error(`Invalid confidence: ${value}. Must be a valid number`);
-    }
-    if (value < 0 || value > 1) {
-      throw new Error(`Invalid confidence: ${value}. Must be between 0 and 1`);
-    }
-    return value;
   }
 }
