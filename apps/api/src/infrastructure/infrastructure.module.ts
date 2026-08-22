@@ -1,11 +1,16 @@
 import { Module } from '@nestjs/common';
+
+import { MessagingModule } from './messaging/messaging.module';
+
 import { SupabaseService } from './database/supabase.service';
 import { SupabaseTicketRepository } from './repositories/supabase-ticket.repository';
-import { RabbitMQMessagePublisher } from './messaging/rabbitmq-message-publisher';
+import { OpenCodeAdapter } from './ai/opencode/opencode.adapter';
+
 import { TICKET_REPOSITORY } from '@domain/repositories/ticket.repository';
-import { MESSAGE_PUBLISHER } from '@domain/events/message-publisher.interface';
+import { AI_PROVIDER } from '@application/ports/ai-provider.interface';
 
 @Module({
+  imports: [MessagingModule],
   providers: [
     SupabaseService,
     {
@@ -13,10 +18,10 @@ import { MESSAGE_PUBLISHER } from '@domain/events/message-publisher.interface';
       useClass: SupabaseTicketRepository,
     },
     {
-      provide: MESSAGE_PUBLISHER,
-      useClass: RabbitMQMessagePublisher,
+      provide: AI_PROVIDER,
+      useClass: OpenCodeAdapter,
     },
   ],
-  exports: [TICKET_REPOSITORY, MESSAGE_PUBLISHER],
+  exports: [TICKET_REPOSITORY, AI_PROVIDER, MessagingModule],
 })
 export class InfrastructureModule {}

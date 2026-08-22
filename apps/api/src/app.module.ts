@@ -1,12 +1,15 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
-import { CqrsModule } from '@nestjs/cqrs';
+import { GlobalCqrsModule } from './common/global-cqrs.module';
 import { InfrastructureModule } from './infrastructure/infrastructure.module';
+
 import { TicketsController } from '@presentation/controllers/tickets.controller';
+
 import { CreateTicketHandler } from '@application/commands/tickets/create-ticket.handler';
+import { AnalyzeTicketHandler } from '@application/commands/tickets/analyze-ticket.handler';
 import { GetTicketHandler } from '@application/queries/tickets/get-ticket.handler';
 
-const CommandHandlers = [CreateTicketHandler];
+const CommandHandlers = [CreateTicketHandler, AnalyzeTicketHandler];
 const QueryHandlers = [GetTicketHandler];
 @Module({
   imports: [
@@ -14,7 +17,7 @@ const QueryHandlers = [GetTicketHandler];
       envFilePath: '../../.env',
       isGlobal: true,
     }),
-    CqrsModule,
+    GlobalCqrsModule,
     InfrastructureModule,
   ],
   controllers: [TicketsController],
