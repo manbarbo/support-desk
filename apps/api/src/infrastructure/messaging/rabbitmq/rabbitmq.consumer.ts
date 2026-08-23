@@ -2,8 +2,12 @@ import { Injectable } from '@nestjs/common';
 import type { ConsumeMessage } from 'amqplib';
 
 import { RabbitMQConnection } from './rabbitmq.connection';
-import { RabbitMQTopology, RabbitMQQueueConfig } from './rabbitmq.topology';
+import { RabbitMQTopology } from './rabbitmq.topology';
 import { RabbitMQRetry } from './rabbitmq.retry';
+import type {
+  MessageQueueConfig,
+  MessageExchangeConfig,
+} from '../messaging.types';
 
 @Injectable()
 export class RabbitMQConsumer {
@@ -14,12 +18,13 @@ export class RabbitMQConsumer {
   ) {}
 
   async consume(
-    config: RabbitMQQueueConfig,
+    config: MessageQueueConfig,
+    exchange: MessageExchangeConfig,
     handler: (message: ConsumeMessage) => Promise<void>,
   ): Promise<void> {
     // IMPORTANTE:
     // Primero aseguramos que exchange + queues + bindings existen.
-    await this.topology.setupQueue(config);
+    await this.topology.setupQueue(config, exchange);
 
     const channel = await this.connection.getChannel();
 
@@ -39,7 +44,7 @@ export class RabbitMQConsumer {
   private async process(
     message: ConsumeMessage,
     handler: (message: ConsumeMessage) => Promise<void>,
-    config: RabbitMQQueueConfig,
+    config: MessageQueueConfig,
   ): Promise<void> {
     try {
       await handler(message);

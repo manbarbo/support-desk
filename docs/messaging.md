@@ -1,12 +1,74 @@
-# Messaging System with RabbitMQ
+# Messaging System
 
 ## Overview
 
-AI Support Desk uses RabbitMQ as a message broker to decouple ticket creation from AI processing. This document explains the messaging architecture, components, and patterns used in the system.
+AI Support Desk uses a broker-agnostic messaging abstraction to decouple ticket creation from AI processing. The system currently implements RabbitMQ, but the abstraction layer allows switching to other message brokers (Kafka, SQS, etc.) without modifying application logic.
+
+This document explains the messaging architecture, components, and patterns used in the system.
 
 ---
 
 ## Architecture
+
+### Two-Layer Design
+
+The messaging system is divided into two distinct layers:
+
+**1. RabbitMQModule (Generic Broker Implementation)**
+- Implements broker-specific logic
+- Provides generic interfaces for queue and exchange configuration
+- Can be replaced with other brokers without affecting application code
+- Exports: `RabbitMQConsumer`, `RabbitMQMessagePublisher`
+- Internal: `RabbitMQConnection`, `RabbitMQTopology`, `RabbitMQRetry`
+
+**2. MessagingModule (Application-Specific)**
+- Uses generic messaging interfaces
+- Contains application-specific consumers (e.g., `TicketCreatedConsumer`)
+- Configures queues and exchanges for the application's needs
+
+```text
+MessagingModule (Application-Specific)
+    │
+    ├── imports: RabbitMQModule
+    │
+    ├── TicketCreatedConsumer
+    └── MESSAGE_PUBLISHER → RabbitMQMessagePublisher
+    
+RabbitMQModule (Generic, Reusable)
+    │
+    ├── RabbitMQConnection (internal)
+    ├── RabbitMQTopology (internal)
+    ├── RabbitMQRetry (internal)
+    ├── RabbitMQConsumer (exported)
+    └── RabbitMQMessagePublisher (exported)
+```
+
+### Generic Interfaces
+
+The system uses broker-agnostic interfaces defined in `messaging.types.ts`:
+
+```typescript
+interface MessageQueueConfig {
+  queue: string;
+  routingKey: string;
+  retryQueue?: string;
+  deadLetterQueue?: string;
+  durable?: boolean;
+  autoDelete?: boolean;
+}
+
+interface MessageExchangeConfig {
+  name: string;
+  type: 'topic' | 'direct' | 'fanout' | 'headers';
+  durable?: boolean;
+  autoDelete?: boolean;
+}
+```
+
+**Benefits**:
+- **Broker Independence**: Application code doesn't depend on RabbitMQ-specific types
+- **Flexibility**: Optional retry and DLQ configuration per queue
+- **Replaceability**: Easy to switch to Kafka, SQS, or other brokers
 
 ### High-Level Flow
 
@@ -92,43 +154,35 @@ export class RabbitMQConnection implements OnModuleDestroy {
 ```typescript
 @Injectable()
 export class RabbitMQTopology {
-  async setupQueue(config: RabbitMQQueueConfig): Promise<void>
+  async setupQueue(
+    config: MessageQueueConfig,
+    exchange: MessageExchangeConfig,
+  ): Promise<void>
 }
 ```
 
 **Configuration**:
 
+Uses generic `MessageQueueConfig` interface:
+
 ```typescript
-interface RabbitMQQueueConfig {
+interface MessageQueueConfig {
   queue: string;
-  retryQueue: string;
-  deadLetterQueue: string;
   routingKey: string;
+  retryQueue?: string;        // Optional
+  deadLetterQueue?: string;   // Optional
+  durable?: boolean;
+  autoDelete?: boolean;
 }
 ```
 
-**Topology Created**:
+**Key Features**:
+- Generic implementation using broker-agnostic interfaces
+- Supports optional retry and DLQ queues
+- Idempotent queue creation (safe to call multiple times)
+- Configurable exchange and queue properties
 
-```text
-Exchange: support.events (topic)
-    │
-    │ routing key: ticket.created
-    ▼
-Queue: ticket.ai.processing (durable)
-    │
-    │ dead-letter-routing-key
-    ▼
-Queue: ticket.ai.processing.retry (durable)
-    │
-    │ TTL expires → dead-letter back to main queue
-    ▼
-Queue: ticket.ai.processing (requeued)
-
-Queue: ticket.ai.processing.dlq (durable)
-    └── Messages that failed after max retries
-```
-
-**Why**: Separates infrastructure concerns from business logic. The topology is declared idempotently, so it's safe to call multiple times.
+**Why**: Separates infrastructure concerns from business logic. The topology is declared using generic interfaces, making it easy to implement for other brokers.
 
 ---
 
@@ -179,19 +233,21 @@ async publish(event: DomainEvent): Promise<void> {
 @Injectable()
 export class RabbitMQConsumer {
   async consume(
-    config: RabbitMQQueueConfig,
+    config: MessageQueueConfig,
+    exchange: MessageExchangeConfig,
     handler: (message: ConsumeMessage) => Promise<void>,
   ): Promise<void>
 }
 ```
 
 **Key Features**:
-- Generic and reusable for any queue
+- Generic and reusable for any queue configuration
+- Uses broker-agnostic interfaces (`MessageQueueConfig`, `MessageExchangeConfig`)
 - Automatically sets up topology before consuming
 - Handles errors and delegates to `RabbitMQRetry`
 - Prefetch of 1 (process one message at a time)
 
-**Why**: Business consumers (like `TicketCreatedConsumer`) only need to focus on message processing logic, not on RabbitMQ details.
+**Why**: Business consumers (like `TicketCreatedConsumer`) only need to focus on message processing logic, not on RabbitMQ details or queue configuration.
 
 ---
 
@@ -290,12 +346,8 @@ BROKER_RETRY_BASE_DELAY=5000
 export class TicketCreatedConsumer implements OnModuleInit {
   async onModuleInit(): Promise<void> {
     await this.consumer.consume(
-      {
-        queue: 'ticket.ai.processing',
-        retryQueue: 'ticket.ai.processing.retry',
-        deadLetterQueue: 'ticket.ai.processing.dlq',
-        routingKey: 'ticket.created',
-      },
+      TICKET_CREATED_QUEUE,      // Generic MessageQueueConfig
+      SUPPORT_EVENTS_EXCHANGE,   // Generic MessageExchangeConfig
       async (message) => {
         await this.processMessage(message);
       },
@@ -310,12 +362,29 @@ export class TicketCreatedConsumer implements OnModuleInit {
 }
 ```
 
+**Configuration** (from `messaging.config.ts`):
+
+```typescript
+export const TICKET_CREATED_QUEUE: MessageQueueConfig = {
+  queue: 'ticket.ai.processing',
+  routingKey: 'ticket.created',
+  retryQueue: 'ticket.ai.processing.retry',
+  deadLetterQueue: 'ticket.ai.processing.dlq',
+};
+
+export const SUPPORT_EVENTS_EXCHANGE: MessageExchangeConfig = {
+  name: 'support.events',
+  type: 'topic',
+};
+```
+
 **Key Features**:
 - Only knows about business logic (Event → Command)
+- Uses generic interfaces from `messaging.config.ts`
 - Delegates all RabbitMQ concerns to `RabbitMQConsumer`
 - Integrates with CQRS via `CommandBus`
 
-**Why**: Separation of concerns. The consumer doesn't need to know about retries, DLQ, or RabbitMQ internals.
+**Why**: Separation of concerns. The consumer doesn't need to know about retries, DLQ, or RabbitMQ internals. Configuration is centralized and uses broker-agnostic interfaces.
 
 ---
 
@@ -631,5 +700,99 @@ The messaging system provides:
 - ✅ **Scalability**: Easy to add more consumers
 - ✅ **Observability**: Logging and monitoring support
 - ✅ **Maintainability**: Clean separation of concerns
+- ✅ **Broker Independence**: Generic interfaces allow switching message brokers
 
 The refactored architecture separates RabbitMQ infrastructure from business logic, making the system easier to understand, test, and maintain.
+
+---
+
+## Switching to a Different Broker
+
+The broker-agnostic abstraction makes it straightforward to switch from RabbitMQ to another message broker (e.g., Kafka, SQS, Azure Service Bus).
+
+### Steps to Switch Brokers
+
+1. **Create a new broker module** (e.g., `KafkaModule`):
+
+```typescript
+@Module({
+  providers: [
+    KafkaConnection,
+    KafkaTopology,
+    KafkaRetry,
+    KafkaConsumer,
+    KafkaMessagePublisher,
+  ],
+  exports: [KafkaConsumer, KafkaMessagePublisher],
+})
+export class KafkaModule {}
+```
+
+2. **Implement the same generic interfaces**:
+
+```typescript
+// KafkaConsumer uses the same MessageQueueConfig interface
+@Injectable()
+export class KafkaConsumer {
+  async consume(
+    config: MessageQueueConfig,      // Same interface
+    exchange: MessageExchangeConfig, // Same interface
+    handler: (message: KafkaMessage) => Promise<void>,
+  ): Promise<void> {
+    // Kafka-specific implementation
+  }
+}
+```
+
+3. **Update MessagingModule** to import the new broker module:
+
+```typescript
+@Module({
+  imports: [KafkaModule],  // Changed from RabbitMQModule
+  providers: [
+    TicketCreatedConsumer,
+    {
+      provide: MESSAGE_PUBLISHER,
+      useExisting: KafkaMessagePublisher,
+    },
+  ],
+})
+export class MessagingModule {}
+```
+
+4. **No changes needed** in:
+   - `TicketCreatedConsumer` (uses generic interfaces)
+   - `messaging.config.ts` (uses generic interfaces)
+   - Business logic (uses `MessagePublisher` abstraction)
+
+### Benefits of This Approach
+
+- **Zero business logic changes**: Consumers and handlers remain unchanged
+- **Configuration reuse**: Queue and exchange configs work with any broker
+- **Gradual migration**: Can run both brokers in parallel during transition
+- **Testing**: Easy to mock different brokers in tests
+
+### Example: Kafka Implementation
+
+```typescript
+// messaging.config.ts (unchanged)
+export const TICKET_CREATED_QUEUE: MessageQueueConfig = {
+  queue: 'ticket.ai.processing',
+  routingKey: 'ticket.created',
+  retryQueue: 'ticket.ai.processing.retry',
+  deadLetterQueue: 'ticket.ai.processing.dlq',
+};
+
+// Kafka consumer maps generic config to Kafka concepts
+@Injectable()
+export class KafkaConsumer {
+  async consume(config: MessageQueueConfig, ...) {
+    // Map MessageQueueConfig to Kafka topic/partition config
+    const kafkaConfig = this.mapToKafkaConfig(config);
+    // Subscribe to Kafka topic
+    await this.kafkaClient.subscribe(kafkaConfig);
+  }
+}
+```
+
+This demonstrates the power of the abstraction: the same configuration works across different brokers, and only the infrastructure layer needs to change.

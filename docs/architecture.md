@@ -540,12 +540,14 @@ AppModule
 │   │   ├── SupportAgent
 │   │   └── AgentTools
 │   ├── MessagingModule
-│   │   ├── RabbitMQConnection
-│   │   ├── RabbitMQTopology
-│   │   ├── RabbitMQMessagePublisher
-│   │   ├── RabbitMQConsumer
-│   │   ├── RabbitMQRetry
-│   │   └── TicketCreatedConsumer
+│   │   ├── RabbitMQModule (generic broker abstraction)
+│   │   │   ├── RabbitMQConnection
+│   │   │   ├── RabbitMQTopology
+│   │   │   ├── RabbitMQMessagePublisher
+│   │   │   ├── RabbitMQConsumer
+│   │   │   └── RabbitMQRetry
+│   │   ├── TicketCreatedConsumer
+│   │   └── Messaging Types (broker-agnostic interfaces)
 │   └── DatabaseModule
 │       ├── SupabaseService
 │       └── SupabaseTicketRepository
@@ -553,6 +555,22 @@ AppModule
     ├── TicketsController
     └── DLQController
 ```
+
+## Messaging Module Architecture
+
+The messaging system is divided into two layers:
+
+**1. RabbitMQModule (Generic)**
+- Implements broker-specific logic
+- Can be replaced with Kafka, SQS, etc.
+- Exports generic interfaces (MessageQueueConfig, MessageExchangeConfig)
+
+**2. MessagingModule (Application-Specific)**
+- Uses generic messaging interfaces
+- Contains application-specific consumers (TicketCreatedConsumer)
+- Configures queues and exchanges for the application
+
+This separation allows changing the message broker without modifying application logic.
 
 ---
 

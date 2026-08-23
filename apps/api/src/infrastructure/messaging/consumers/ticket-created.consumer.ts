@@ -5,6 +5,10 @@ import type { ConsumeMessage } from 'amqplib';
 import { AnalyzeTicketCommand } from '@application/commands/tickets/analyze-ticket.command';
 import { RabbitMQConsumer } from '../rabbitmq/rabbitmq.consumer';
 import type { DomainEvent } from '@domain/events/domain-event';
+import {
+  SUPPORT_EVENTS_EXCHANGE,
+  TICKET_CREATED_QUEUE,
+} from '../messaging.config';
 
 @Injectable()
 export class TicketCreatedConsumer implements OnModuleInit {
@@ -15,12 +19,8 @@ export class TicketCreatedConsumer implements OnModuleInit {
 
   async onModuleInit(): Promise<void> {
     await this.consumer.consume(
-      {
-        queue: 'ticket.ai.processing',
-        retryQueue: 'ticket.ai.processing.retry',
-        deadLetterQueue: 'ticket.ai.processing.dlq',
-        routingKey: 'ticket.created',
-      },
+      TICKET_CREATED_QUEUE,
+      SUPPORT_EVENTS_EXCHANGE,
       async (message: ConsumeMessage) => {
         await this.processMessage(message);
       },

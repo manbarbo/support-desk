@@ -13,8 +13,8 @@ The platform combines ticket management with asynchronous AI processing to autom
 - AI-generated response suggestions
 - Asynchronous AI processing
 - Event-driven communication
-- RabbitMQ message broker with retry and DLQ
-- Exponential backoff retry strategy
+- Broker-agnostic messaging abstraction (currently RabbitMQ)
+- Retry mechanism with exponential backoff and Dead Letter Queue
 - PostgreSQL persistence through Supabase
 - CQRS-based application flow
 - Clean Architecture
@@ -313,7 +313,10 @@ api/src/
 │   │   └── supabase.types.ts
 │   ├── messaging/
 │   │   ├── messaging.module.ts
+│   │   ├── messaging.types.ts        # Broker-agnostic interfaces
+│   │   ├── messaging.config.ts       # Application-specific queue configs
 │   │   ├── rabbitmq/
+│   │   │   ├── rabbitmq.module.ts
 │   │   │   ├── rabbitmq.connection.ts
 │   │   │   ├── rabbitmq.topology.ts
 │   │   │   ├── rabbitmq.publisher.ts
@@ -355,17 +358,51 @@ tickets
 
 ---
 
-# RabbitMQ
+# Messaging System
 
-RabbitMQ is used to process ticket-related operations asynchronously.
+The system uses a broker-agnostic messaging abstraction that currently implements RabbitMQ. The abstraction layer allows switching to other message brokers (Kafka, SQS, etc.) without modifying application logic.
 
-## Exchange
+## Architecture
+
+The messaging system is divided into two layers:
+
+1. **RabbitMQModule (Generic)**: Implements broker-specific logic using generic interfaces
+2. **MessagingModule (Application-Specific)**: Uses generic interfaces for application-specific consumers
+
+## Generic Interfaces
+
+```typescript
+interface MessageQueueConfig {
+  queue: string;
+  routingKey: string;
+  retryQueue?: string;
+  deadLetterQueue?: string;
+  durable?: boolean;
+  autoDelete?: boolean;
+}
+
+interface MessageExchangeConfig {
+  name: string;
+  type: 'topic' | 'direct' | 'fanout' | 'headers';
+  durable?: boolean;
+  autoDelete?: boolean;
+}
+```
+
+These interfaces allow:
+- **Broker Independence**: Application code doesn't depend on RabbitMQ-specific types
+- **Flexibility**: Optional retry and DLQ configuration per queue
+- **Replaceability**: Easy to switch to Kafka, SQS, or other brokers
+
+## Current Implementation (RabbitMQ)
+
+### Exchange
 
 ```text
 support.events (topic)
 ```
 
-## Routing Keys
+### Routing Keys
 
 ```text
 ticket.created
@@ -373,7 +410,7 @@ ticket.analyzed
 ticket.responded
 ```
 
-## Queues
+### Queues
 
 ```text
 ticket.ai.processing           # Main processing queue
@@ -381,7 +418,7 @@ ticket.ai.processing.retry     # Retry queue with TTL
 ticket.ai.processing.dlq       # Dead Letter Queue
 ```
 
-## Retry Configuration
+### Retry Configuration
 
 ```env
 BROKER_URL=amqp://guest:guest@localhost:5672
@@ -390,6 +427,17 @@ BROKER_RETRY_BASE_DELAY=5000  # 5 seconds
 ```
 
 Exponential backoff: 5s → 25s → 125s (max 5 minutes)
+
+## Switching Brokers
+
+To switch from RabbitMQ to another broker (e.g., Kafka):
+
+1. Create a new broker module (e.g., `KafkaModule`)
+2. Implement the same generic interfaces
+3. Update `MessagingModule` to import the new broker module
+4. No changes needed in consumers or business logic
+
+See [docs/messaging.md](docs/messaging.md#switching-to-a-different-broker) for detailed instructions.
 
 ---
 
@@ -636,7 +684,7 @@ Comprehensive documentation is available in the `docs/` directory:
 - **[System Overview](docs/system-overview.md)** — Complete system flow, components, and architectural decisions
 - **[Architecture](docs/architecture.md)** — Layered architecture, CQRS, event-driven design
 - **[Design Patterns](docs/patterns.md)** — SOLID principles, patterns used, and refactoring decisions
-- **[Messaging System](docs/messaging.md)** — RabbitMQ implementation, retry mechanism, DLQ
+- **[Messaging System](docs/messaging.md)** — Broker-agnostic messaging abstraction with RabbitMQ implementation
 
 ## Development
 
@@ -651,7 +699,7 @@ Comprehensive documentation is available in the `docs/` directory:
 | [System Overview](docs/system-overview.md) | Start here to understand the complete system |
 | [Development Guide](docs/development-guide.md) | Setup and run the application locally |
 | [Architecture](docs/architecture.md) | Understand the layered architecture |
-| [Messaging](docs/messaging.md) | Deep dive into RabbitMQ implementation |
+| [Messaging](docs/messaging.md) | Broker-agnostic messaging with RabbitMQ implementation |
 | [Patterns](docs/patterns.md) | Design patterns and best practices |
 
 ---
@@ -669,6 +717,7 @@ This project demonstrates the following design patterns:
 - **Dependency Injection**: Loose coupling
 - **Dead Letter Queue**: Resilient message processing
 - **Agent Tool Pattern**: Modular AI capabilities
+- **Broker Abstraction Pattern**: Message broker independence
 
 See `docs/patterns.md` for detailed explanations.
 

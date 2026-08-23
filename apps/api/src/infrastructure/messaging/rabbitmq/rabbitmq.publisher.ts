@@ -1,15 +1,17 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Inject } from '@nestjs/common';
 
 import type { MessagePublisher } from '@domain/events/message-publisher.interface';
 import type { DomainEvent } from '@domain/events/domain-event';
 
 import { RabbitMQConnection } from './rabbitmq.connection';
+import { RABBITMQ_EXCHANGE } from './rabbitmq.constants';
 
 @Injectable()
 export class RabbitMQMessagePublisher implements MessagePublisher {
-  private readonly exchange = 'support.events';
-
-  constructor(private readonly connection: RabbitMQConnection) {}
+  constructor(
+    private readonly connection: RabbitMQConnection,
+    @Inject(RABBITMQ_EXCHANGE) private readonly exchange: string,
+  ) {}
 
   async publish(event: DomainEvent): Promise<void> {
     const channel = await this.connection.getChannel();

@@ -5,8 +5,8 @@ import type { Channel, ConsumeMessage } from 'amqplib';
 import { RabbitMQConnection } from './rabbitmq.connection';
 
 export interface RetryConfig {
-  retryQueue: string;
-  deadLetterQueue: string;
+  retryQueue?: string;
+  deadLetterQueue?: string;
   originalQueue: string;
 }
 
@@ -41,11 +41,29 @@ export class RabbitMQRetry {
 
     const content = message.content;
 
+    // Si no hay retry queue configurada, hacer reject inmediatamente
+    if (!config.retryQueue) {
+      console.error(
+        `No retry queue configured for ${config.originalQueue}. Rejecting message.`,
+      );
+      channel.nack(message, false, false);
+      return;
+    }
+
     if (retryCount < this.maxRetries) {
       this.sendToRetryQueue(channel, content, retryCount, error, config);
 
       channel.ack(message);
 
+      return;
+    }
+
+    // Si no hay DLQ configurada, hacer reject después de los reintentos
+    if (!config.deadLetterQueue) {
+      console.error(
+        `Max retries reached and no DLQ configured for ${config.originalQueue}. Rejecting message.`,
+      );
+      channel.nack(message, false, false);
       return;
     }
 
@@ -61,6 +79,10 @@ export class RabbitMQRetry {
     error: Error,
     config: RetryConfig,
   ): void {
+    if (!config.retryQueue) {
+      throw new Error('Retry queue not configured');
+    }
+
     const newRetryCount = retryCount + 1;
 
     const delay = this.calculateBackoff(newRetryCount);
@@ -90,6 +112,10 @@ export class RabbitMQRetry {
     error: Error,
     config: RetryConfig,
   ): void {
+    if (!config.deadLetterQueue) {
+      throw new Error('Dead letter queue not configured');
+    }
+
     console.error(
       `Max retries reached. ` + `Moving message to ${config.deadLetterQueue}`,
     );

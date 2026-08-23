@@ -483,6 +483,64 @@ This provides a controlled failure path with exponential backoff.
 
 ---
 
+# Broker Abstraction Pattern
+
+The messaging system uses a broker-agnostic abstraction layer to decouple application logic from the specific message broker implementation.
+
+## Generic Interfaces
+
+```typescript
+interface MessageQueueConfig {
+  queue: string;
+  routingKey: string;
+  retryQueue?: string;
+  deadLetterQueue?: string;
+  durable?: boolean;
+  autoDelete?: boolean;
+}
+
+interface MessageExchangeConfig {
+  name: string;
+  type: 'topic' | 'direct' | 'fanout' | 'headers';
+  durable?: boolean;
+  autoDelete?: boolean;
+}
+```
+
+## Implementation
+
+```text
+Application Layer
+       │
+       ▼
+MessageQueueConfig (generic interface)
+       ▲
+       │
+RabbitMQModule (implementation)
+       │
+       ├── RabbitMQConnection
+       ├── RabbitMQTopology
+       ├── RabbitMQConsumer
+       └── RabbitMQMessagePublisher
+```
+
+## Benefits
+
+- **Broker Independence**: Application logic doesn't depend on RabbitMQ-specific types
+- **Replaceability**: Can switch to Kafka, SQS, or other brokers by implementing new modules
+- **Testability**: Easy to mock messaging interfaces in tests
+- **Flexibility**: Different queues can have different configurations (with/without retry, DLQ)
+
+## Example: Switching Brokers
+
+To switch from RabbitMQ to Kafka:
+
+1. Create `KafkaModule` implementing the same generic interfaces
+2. Update `MessagingModule` to import `KafkaModule` instead of `RabbitMQModule`
+3. No changes needed in `TicketCreatedConsumer` or other application code
+
+---
+
 # Agent Tool Abstraction
 
 AI agent capabilities are represented as tools.

@@ -2,59 +2,63 @@ import { Injectable } from '@nestjs/common';
 import type { Channel } from 'amqplib';
 
 import { RabbitMQConnection } from './rabbitmq.connection';
-
-export interface RabbitMQQueueConfig {
-  queue: string;
-  retryQueue: string;
-  deadLetterQueue: string;
-  routingKey: string;
-}
+import type { MessageQueueConfig, MessageExchangeConfig } from '../messaging.types';
 
 @Injectable()
 export class RabbitMQTopology {
-  private readonly exchange = 'support.events';
-
   constructor(private readonly connection: RabbitMQConnection) {}
 
-  async setupQueue(config: RabbitMQQueueConfig): Promise<void> {
+  async setupQueue(
+    config: MessageQueueConfig,
+    exchange: MessageExchangeConfig,
+  ): Promise<void> {
     const channel = await this.connection.getChannel();
 
-    await this.setupExchange(channel);
+    await this.setupExchange(channel, exchange);
 
     await this.setupMainQueue(channel, config);
 
-    await this.setupRetryQueue(channel, config);
+    if (config.retryQueue) {
+      await this.setupRetryQueue(channel, config);
+    }
 
-    await this.setupDeadLetterQueue(channel, config);
+    if (config.deadLetterQueue) {
+      await this.setupDeadLetterQueue(channel, config);
+    }
 
-    await this.setupBindings(channel, config);
+    await this.setupBindings(channel, config, exchange.name);
 
     console.log(`RabbitMQ topology ready for queue '${config.queue}'`);
   }
 
-  private async setupExchange(channel: Channel): Promise<void> {
-    await channel.assertExchange(this.exchange, 'topic', {
-      durable: true,
+  private async setupExchange(
+    channel: Channel,
+    exchange: MessageExchangeConfig,
+  ): Promise<void> {
+    await channel.assertExchange(exchange.name, exchange.type, {
+      durable: exchange.durable ?? true,
     });
   }
 
   private async setupMainQueue(
     channel: Channel,
-    config: RabbitMQQueueConfig,
+    config: MessageQueueConfig,
   ): Promise<void> {
     await channel.assertQueue(config.queue, {
-      durable: true,
-      autoDelete: false,
+      durable: config.durable ?? true,
+      autoDelete: config.autoDelete ?? false,
     });
   }
 
   private async setupRetryQueue(
     channel: Channel,
-    config: RabbitMQQueueConfig,
+    config: MessageQueueConfig,
   ): Promise<void> {
+    if (!config.retryQueue) return;
+
     await channel.assertQueue(config.retryQueue, {
-      durable: true,
-      autoDelete: false,
+      durable: config.durable ?? true,
+      autoDelete: config.autoDelete ?? false,
       arguments: {
         'x-dead-letter-exchange': '',
         'x-dead-letter-routing-key': config.queue,
@@ -64,18 +68,21 @@ export class RabbitMQTopology {
 
   private async setupDeadLetterQueue(
     channel: Channel,
-    config: RabbitMQQueueConfig,
+    config: MessageQueueConfig,
   ): Promise<void> {
+    if (!config.deadLetterQueue) return;
+
     await channel.assertQueue(config.deadLetterQueue, {
-      durable: true,
-      autoDelete: false,
+      durable: config.durable ?? true,
+      autoDelete: config.autoDelete ?? false,
     });
   }
 
   private async setupBindings(
     channel: Channel,
-    config: RabbitMQQueueConfig,
+    config: MessageQueueConfig,
+    exchangeName: string,
   ): Promise<void> {
-    await channel.bindQueue(config.queue, this.exchange, config.routingKey);
+    await channel.bindQueue(config.queue, exchangeName, config.routingKey);
   }
 }
