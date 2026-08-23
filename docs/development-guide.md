@@ -290,6 +290,62 @@ Go to RabbitMQ Management UI (http://localhost:15672):
 
 ---
 
+## Frontend Development Conventions
+
+### Folder Structure
+
+The frontend follows the structure documented in [Frontend Architecture](frontend-architecture.md):
+
+```text
+apps/web/src/
+├── app/              # Next.js routes only
+├── components/       # Reusable UI
+│   ├── layout/       # Header, Sidebar
+│   ├── tickets/      # Ticket-specific UI
+│   └── ui/           # Generic primitives (Button, Input, Badge)
+├── features/tickets/ # Feature logic
+│   ├── api/
+│   ├── hooks/
+│   ├── types/
+│   └── utils/
+├── lib/api/          # Generic HTTP client
+├── types/            # Global types
+└── config/           # Environment variables
+```
+
+### Key Rules
+
+1. **Keep `app/` thin.** Pages should delegate to components and features.
+2. **Use Server Components by default.** Only add `'use client'` for interactivity.
+3. **Do not call `fetch` directly.** Use `lib/api/client.ts` or feature API functions.
+4. **Colocate ticket types in `features/tickets/types/`**, not in a global `types/` folder.
+5. **Name component files with PascalCase**: `Header.tsx`, `TicketList.tsx`.
+6. **Name non-component files with kebab-case**: `tickets.api.ts`, `use-tickets.ts`.
+
+### Environment Variables
+
+Frontend-visible variables must use the `NEXT_PUBLIC_` prefix:
+
+```env
+NEXT_PUBLIC_API_URL=http://localhost:3001
+```
+
+Read them through `config/env.ts`:
+
+```typescript
+import { env } from '@/config/env';
+
+// env.apiUrl
+```
+
+### Data Fetching
+
+- **Server Components**: import API functions from `features/tickets/api/tickets.api.ts` and `await` them directly.
+- **Client Components**: use hooks from `features/tickets/hooks/`.
+- Use `cache: 'no-store'` for ticket data because status changes asynchronously from `PROCESSING` to `ANALYZED`.
+
+---
+
 ## Testing the Frontend
 
 ### 1. Access the Dashboard

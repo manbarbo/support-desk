@@ -1,4 +1,4 @@
-import type { TicketStatus } from "@/types/ticket";
+import type { TicketStatus } from "@/features/tickets/types/ticket.types";
 import { cn } from "@/lib/utils";
 
 const statusStyles: Record<TicketStatus, string> = {

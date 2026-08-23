@@ -11,6 +11,7 @@ docs/
 ├── README.md                    ← You are here
 ├── system-overview.md           ← System architecture and flows
 ├── architecture.md              ← Layered architecture details
+├── frontend-architecture.md     ← Next.js frontend structure and conventions
 ├── patterns.md                  ← Design patterns and principles
 ├── messaging.md                 ← RabbitMQ messaging system
 ├── development-guide.md         ← Setup and development guide
@@ -78,6 +79,7 @@ Read these documents:
 - Event-driven architecture
 - Module organization
 - Dependency rules
+- Frontend architecture boundary
 
 **When to read:**
 - Understanding code organization
@@ -89,7 +91,32 @@ Read these documents:
 - CQRS (Commands and Queries)
 - Event-Driven Architecture
 - Module Organization
+- Frontend Architecture
 - Architectural Constraints
+
+---
+
+### [Frontend Architecture](frontend-architecture.md)
+
+**What it covers:**
+- Next.js App Router folder structure
+- Separation of pages, components, features, lib, types, and config
+- Data fetching patterns (Server Components vs Client Components)
+- Naming conventions
+- Feature-based colocation
+- Migration path from flat scaffold to target structure
+
+**When to read:**
+- Setting up or refactoring the frontend
+- Adding new frontend features
+- Understanding where to place new files
+
+**Key sections:**
+- Directory Structure
+- Layer Responsibilities
+- Naming Conventions
+- Data Fetching Patterns
+- Current vs Target Structure
 
 ---
 
@@ -220,7 +247,7 @@ Read these documents:
 | **New Developer** | Development Guide | System Overview, Architecture |
 | **Tech Lead** | System Overview | Architecture, Patterns |
 | **Backend Dev** | Architecture | Messaging, Patterns |
-| **Frontend Dev** | System Overview | Development Guide |
+| **Frontend Dev** | Frontend Architecture | Development Guide |
 | **DevOps** | Messaging | Development Guide |
 | **Product Manager** | System Overview | Development Plan |
 
@@ -251,10 +278,11 @@ Read these documents:
 When making changes to the codebase:
 
 1. **New feature**: Update System Overview and Architecture
-2. **New pattern**: Update Patterns document
-3. **Messaging changes**: Update Messaging document
-4. **Setup changes**: Update Development Guide
-5. **Roadmap changes**: Update Development Plan
+2. **Frontend change**: Update Frontend Architecture
+3. **New pattern**: Update Patterns document
+4. **Messaging changes**: Update Messaging document
+5. **Setup changes**: Update Development Guide
+6. **Roadmap changes**: Update Development Plan
 
 ### Documentation Standards
 
@@ -283,10 +311,11 @@ If you can't find what you're looking for:
 |----------|--------|--------------|
 | System Overview | ✅ Complete | 2026-08-22 |
 | Architecture | ✅ Complete | 2026-08-22 |
+| Frontend Architecture | ✅ Complete | 2026-08-23 |
 | Patterns | ✅ Complete | 2026-08-22 |
 | Messaging | ✅ Complete | 2026-08-22 |
 | Development Guide | ✅ Complete | 2026-08-22 |
-| Development Plan | ✅ Complete | 2026-08-22 |
+| Development Plan | ✅ Complete | 2026-08-23 |
 
 ---
 
@@ -296,17 +325,19 @@ If you can't find what you're looking for:
 
 1. Read [Main README](../README.md)
 2. Read [System Overview](system-overview.md)
-3. Follow [Development Guide](development-guide.md)
-4. Explore the codebase
-5. Try making small changes
+3. Read [Frontend Architecture](frontend-architecture.md)
+4. Follow [Development Guide](development-guide.md)
+5. Explore the codebase
+6. Try making small changes
 
 ### Intermediate Path
 
 1. Read [Architecture](architecture.md)
-2. Read [Patterns](patterns.md)
-3. Read [Messaging](messaging.md)
-4. Understand the flow end-to-end
-5. Add a new feature
+2. Read [Frontend Architecture](frontend-architecture.md)
+3. Read [Patterns](patterns.md)
+4. Read [Messaging](messaging.md)
+5. Understand the flow end-to-end
+6. Add a new feature
 
 ### Advanced Path
 
@@ -321,6 +352,7 @@ If you can't find what you're looking for:
 ## 📌 Quick Links
 
 - [Main README](../README.md)
+- [Frontend Architecture](frontend-architecture.md) — Next.js structure and conventions
 - [AGENTS.md](../AGENTS.md) — Development rules
 - [Development Plan](development-plan.md) — Roadmap
 - [Back to Top](#documentation-index)

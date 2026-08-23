@@ -1,9 +1,9 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { fetchTicket } from "@/lib/api";
-import { Header } from "@/components/layout/header";
-import { TicketStatusBadge } from "@/components/tickets/ticket-status-badge";
-import { TicketPriorityBadge } from "@/components/tickets/ticket-priority-badge";
+import { getTicket } from "@/features/tickets/api/tickets.api";
+import { Header } from "@/components/layout/Header";
+import { TicketStatusBadge } from "@/components/tickets/TicketStatusBadge";
+import { TicketPriorityBadge } from "@/components/tickets/TicketPriorityBadge";
 
 export default async function TicketDetailPage({
   params,
@@ -15,7 +15,7 @@ export default async function TicketDetailPage({
   let ticket;
 
   try {
-    ticket = await fetchTicket(id);
+    ticket = await getTicket(id);
   } catch {
     notFound();
   }

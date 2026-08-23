@@ -574,6 +574,44 @@ This separation allows changing the message broker without modifying application
 
 ---
 
+# Frontend Architecture
+
+The frontend is a Next.js 16 application in `apps/web/`. It is intentionally **not** organized as a Clean Architecture mirror of the backend. Instead, it uses the natural structure provided by Next.js App Router:
+
+```text
+app/           → Routing pages
+components/    → Reusable UI (layout, tickets, ui primitives)
+features/      → Feature-specific logic (api, hooks, types, utils)
+lib/           → Shared infrastructure (HTTP client, utilities)
+types/         → Global types
+config/        → Environment variables
+```
+
+## Frontend/Backend Boundary
+
+```text
+Next.js Frontend
+      |
+      | HTTP (REST + JSON)
+      ▼
+NestJS API — TicketsController
+      |
+      ├── CommandBus → CreateTicketCommand
+      └── QueryBus   → GetTicketQuery / ListTicketsQuery
+```
+
+The frontend treats the backend as a black-box HTTP API. It does not import domain entities, command classes, or repository interfaces from the backend. Communication happens exclusively through the REST endpoints exposed by the Presentation layer.
+
+## Why Not Clean Architecture in the Frontend?
+
+- Next.js App Router already separates routing (`app/`), UI (`components/`), and infrastructure concerns naturally.
+- The frontend's complexity does not yet justify domain/application/infrastructure layers.
+- Feature-based colocation (`features/tickets/`) scales better than global `services/`, `hooks/`, and `types/` folders.
+
+See [Frontend Architecture](frontend-architecture.md) for detailed conventions.
+
+---
+
 # Architectural Constraints
 
 The following constraints should be preserved:

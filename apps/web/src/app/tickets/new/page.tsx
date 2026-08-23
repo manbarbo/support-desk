@@ -3,8 +3,8 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { Header } from "@/components/layout/header";
-import { createTicket } from "@/lib/api";
+import { Header } from "@/components/layout/Header";
+import { createTicket } from "@/features/tickets/api/tickets.api";
 
 export default function NewTicketPage() {
   const router = useRouter();

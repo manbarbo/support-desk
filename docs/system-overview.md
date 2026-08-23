@@ -15,14 +15,35 @@ AI Support Desk is an intelligent customer support platform that automatically a
 **Responsibilities**:
 - User interface for support agents
 - Ticket creation and management
-- Real-time status updates
-- Display of AI analysis results
+- Display of asynchronous AI analysis results
+- Loading, empty, and error state handling
 
 **Key Features**:
-- Dashboard with ticket list
-- Ticket creation form
-- Ticket detail view with AI analysis
-- Status indicators (PROCESSING, ANALYZED, etc.)
+- Dashboard with ticket list (`/tickets`)
+- Ticket creation form (`/tickets/new`)
+- Ticket detail view with AI analysis (`/tickets/:id`)
+- Status and priority indicators (PROCESSING, ANALYZED, HIGH, URGENT, etc.)
+
+**Frontend Structure**:
+
+The frontend is organized into thin pages, reusable components, and feature-specific logic:
+
+```text
+apps/web/src/
+├── app/                  # Next.js routes
+├── components/
+│   ├── layout/           # Header, Sidebar
+│   ├── tickets/          # TicketList, TicketCard, badges
+│   └── ui/               # Button, Input, Badge
+├── features/tickets/     # API, hooks, types, utilities
+├── lib/api/              # Generic HTTP client
+├── types/                # Global types
+└── config/               # Environment variables
+```
+
+Pages remain small and delegate to components and features. Data fetching uses Next.js Server Components by default, with Client Components reserved for forms and interactivity.
+
+See [Frontend Architecture](frontend-architecture.md) for the full conventions.
 
 ---
 
@@ -229,14 +250,16 @@ Infrastructure (Implementations)
 ┌─────────────────────────────────────────────────────────────────┐
 │                         FRONTEND (Next.js)                       │
 │                                                                   │
-│  ┌──────────────┐         ┌──────────────┐                       │
-│  │ Ticket List  │         │ Create Form  │                       │
-│  └──────────────┘         └──────────────┘                       │
-└─────────────────────────────────────────────────────────────────┘
-         │                           │
-         │ GET /tickets              │ POST /tickets
-         │                           │
-         ▼                           ▼
+│  app/                    components/          features/           │
+│  ┌──────────────┐        ┌──────────────┐     ┌──────────────┐   │
+│  │ /tickets     │◄───────│ TicketList   │◄────│ tickets.api  │   │
+│  │ /tickets/new │        │ Create Form  │     │ use-tickets  │   │
+│  │ /tickets/:id │        │ StatusBadge  │     │ ticket.types │   │
+│  └──────────────┘        └──────────────┘     └──────────────┘   │
+│         │                           │                            │
+│         │ GET /tickets              │ POST /tickets               │
+│         │                           │                            │
+│         ▼                           ▼                            │
 ┌─────────────────────────────────────────────────────────────────┐
 │                      BACKEND API (NestJS)                        │
 │                                                                   │

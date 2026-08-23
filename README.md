@@ -239,7 +239,16 @@ ai-support-desk/
 │   │
 │   └── web/                      # Next.js frontend
 │       └── src/
-│           └── app/
+│           ├── app/              # App Router pages
+│           ├── components/       # Reusable UI components
+│           │   ├── layout/       # Header, Sidebar
+│           │   ├── tickets/      # Ticket-specific components
+│           │   └── ui/           # Generic UI primitives
+│           ├── features/         # Feature-specific logic
+│           │   └── tickets/      # Ticket API, hooks, types
+│           ├── lib/              # Shared helpers and API client
+│           ├── types/            # Global types
+│           └── config/           # Environment configuration
 │
 ├── docs/
 │   ├── architecture.md           # System architecture
@@ -683,6 +692,7 @@ Comprehensive documentation is available in the `docs/` directory:
 
 - **[System Overview](docs/system-overview.md)** — Complete system flow, components, and architectural decisions
 - **[Architecture](docs/architecture.md)** — Layered architecture, CQRS, event-driven design
+- **[Frontend Architecture](docs/frontend-architecture.md)** — Next.js folder structure, data fetching, and conventions
 - **[Design Patterns](docs/patterns.md)** — SOLID principles, patterns used, and refactoring decisions
 - **[Messaging System](docs/messaging.md)** — Broker-agnostic messaging abstraction with RabbitMQ implementation
 
@@ -698,7 +708,8 @@ Comprehensive documentation is available in the `docs/` directory:
 |----------|-------------|
 | [System Overview](docs/system-overview.md) | Start here to understand the complete system |
 | [Development Guide](docs/development-guide.md) | Setup and run the application locally |
-| [Architecture](docs/architecture.md) | Understand the layered architecture |
+| [Architecture](docs/architecture.md) | Understand the layered backend architecture |
+| [Frontend Architecture](docs/frontend-architecture.md) | Next.js structure and conventions |
 | [Messaging](docs/messaging.md) | Broker-agnostic messaging with RabbitMQ implementation |
 | [Patterns](docs/patterns.md) | Design patterns and best practices |
 

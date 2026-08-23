@@ -1,4 +1,4 @@
-import type { TicketPriority } from "@/types/ticket";
+import type { TicketPriority } from "@/features/tickets/types/ticket.types";
 import { cn } from "@/lib/utils";
 
 const priorityStyles: Record<TicketPriority, string> = {
