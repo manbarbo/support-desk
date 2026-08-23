@@ -376,6 +376,55 @@ Open http://localhost:3000 in your browser.
   - Confidence score
   - Suggested response
 
+### 5. Verify Real-Time Updates (SSE)
+
+1. Open the ticket list page (`/tickets`)
+2. Create a new ticket in another tab
+3. Observe: the new ticket appears in the list automatically (no refresh needed)
+4. Open a ticket detail page (`/tickets/:id`)
+5. Wait for AI processing to complete (~5-30 seconds)
+6. Observe: the ticket status changes from `PROCESSING` to `ANALYZED` automatically
+7. Check browser console for `[SSE] Event received` log (if logging is enabled)
+
+---
+
+## Testing SSE (Server-Sent Events)
+
+### Verify SSE Connection
+
+1. Open browser DevTools → Network tab
+2. Navigate to `/tickets` or `/tickets/:id`
+3. Filter by `stream` or `events`
+4. You should see a request to `GET /events/tickets/stream` with status `200` and type `eventsource`
+5. The connection should remain open (not complete)
+
+### Verify Event Delivery
+
+1. With the Network tab open, create a ticket or wait for AI processing
+2. You should see an SSE message with:
+   ```
+   event: ticket.updated
+   data: {"eventId":"...","eventType":"ticket.updated",...}
+   ```
+3. The page should refresh automatically
+
+### Troubleshooting SSE
+
+**SSE connection not appearing:**
+- Verify backend is running on port 3001
+- Check CORS configuration in `main.ts` (SSE requires standard CORS)
+- Ensure `EventEmitterModule` is registered in `app.module.ts`
+
+**SSE connection appears but no events:**
+- Verify `TicketEventEmitterService` is injected in `AnalyzeTicketHandler`
+- Check backend logs for `ticket.updated` emission
+- Verify the `type` field (not `event`) is used in the SSE response
+
+**SSE events received but page doesn't update:**
+- Ensure `TicketStream` component is rendered on the page
+- Check browser console for `router.refresh()` calls
+- Verify pages use `export const dynamic = "force-dynamic"` if data seems cached
+
 ---
 
 ## Testing Retry Mechanism

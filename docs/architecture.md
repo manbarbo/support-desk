@@ -50,6 +50,7 @@ Example:
 
 ```text
 TicketsController
+TicketEventsController (SSE)
 DLQController
 ```
 
@@ -78,6 +79,7 @@ AnalyzeTicketHandler
 GetTicketHandler
 ListTicketsHandler
 SupportAgent
+TicketEventEmitterService
 ```
 
 The application layer depends on domain abstractions.
@@ -99,6 +101,7 @@ TicketSentiment
 TicketAnalysis
 DomainEvent
 TicketCreatedEvent
+TicketUpdatedEvent
 ```
 
 The domain should remain independent from infrastructure.
@@ -243,9 +246,11 @@ CQRS provides logical separation without introducing unnecessary operational com
 
 # Event-Driven Architecture
 
-Ticket processing is event-driven.
+The system uses two event channels for different purposes:
 
-When a ticket is created:
+## 1. RabbitMQ (Cross-Process Async Events)
+
+RabbitMQ handles async processing between services. When a ticket is created:
 
 ```text
 CreateTicketHandler
@@ -262,6 +267,34 @@ CreateTicketHandler
 ```
 
 The HTTP request is therefore independent from AI processing.
+
+## 2. EventEmitter2 (In-Process Real-Time Events)
+
+When AI processing completes, an in-process event bridges the gap between async processing and SSE streaming to the frontend:
+
+```text
+AnalyzeTicketHandler
+        │
+        ├──────────────► Supabase (status: ANALYZED)
+        │
+        └──────────────► EventEmitter2.emit('ticket.updated')
+                              │
+                              ▼
+                     TicketEventsController
+                              │
+                              ▼
+                       SSE Stream
+                              │
+                              ▼
+                  Frontend EventSource
+                              │
+                              ▼
+                       router.refresh()
+```
+
+This two-stage design keeps concerns separated:
+- **RabbitMQ** handles scalable, durable, cross-process async processing
+- **EventEmitter2** handles lightweight, in-process real-time notifications to connected clients
 
 ---
 
@@ -533,6 +566,7 @@ The backend uses NestJS modules to organize concerns:
 ```text
 AppModule
 ├── ConfigModule (global)
+├── EventEmitterModule (global, in-process events)
 ├── GlobalCqrsModule (global)
 ├── InfrastructureModule
 │   ├── AIModule
@@ -551,9 +585,12 @@ AppModule
 │   └── DatabaseModule
 │       ├── SupabaseService
 │       └── SupabaseTicketRepository
-└── Controllers
-    ├── TicketsController
-    └── DLQController
+├── Controllers
+│   ├── TicketsController
+│   ├── TicketEventsController (SSE)
+│   └── DLQController
+└── Application Services
+    └── TicketEventEmitterService
 ```
 
 ## Messaging Module Architecture
@@ -612,6 +649,55 @@ See [Frontend Architecture](frontend-architecture.md) for detailed conventions.
 
 ---
 
+# Server-Sent Events (SSE)
+
+The system uses SSE to push real-time ticket status updates from the backend to the frontend.
+
+## SSE Endpoint
+
+```text
+GET /events/tickets/stream
+```
+
+Returns a `text/event-stream` response that remains open. Events are pushed when ticket status changes (e.g., from `PROCESSING` to `ANALYZED`).
+
+## Backend Components
+
+```text
+AnalyzeTicketHandler
+        │
+        ▼
+TicketEventEmitterService.emitTicketUpdated()
+        │
+        ▼
+EventEmitter2.emit('ticket.updated')
+        │
+        ▼
+TicketEventsController (SSE Observable)
+        │
+        ▼
+HTTP Response: text/event-stream
+```
+
+## Frontend Component
+
+```text
+TicketStream (Client Component)
+        │
+        ▼
+EventSource('/events/tickets/stream')
+        │
+        ▼
+addEventListener('ticket.updated')
+        │
+        ▼
+router.refresh() → re-fetch Server Components
+```
+
+The `TicketStream` component renders nothing visible. It connects to the SSE endpoint and calls `router.refresh()` when an event is received, causing Next.js to re-fetch Server Component data.
+
+---
+
 # Architectural Constraints
 
 The following constraints should be preserved:
@@ -626,3 +712,4 @@ The following constraints should be preserved:
 8. Infrastructure implementations must be replaceable.
 9. Tests must be able to run without requiring real external AI calls.
 10. New infrastructure dependencies should not be introduced without a clear requirement.
+11. Real-time updates must use SSE with in-process EventEmitter2, not direct RabbitMQ-to-frontend connections.

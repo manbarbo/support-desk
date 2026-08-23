@@ -46,6 +46,7 @@ apps/web/src/
 │   ├── tickets/
 │   │   ├── TicketList.tsx        # Ticket list container
 │   │   ├── TicketCard.tsx        # Individual ticket card/row
+│   │   ├── TicketStream.tsx      # SSE client for real-time updates
 │   │   ├── TicketStatusBadge.tsx # Status badge
 │   │   └── TicketPriorityBadge.tsx # Priority badge
 │   │
@@ -304,6 +305,71 @@ export function CreateTicketForm() {
 }
 ```
 
+### Server-Sent Events (SSE) for Real-Time Updates
+
+For real-time updates without polling, use a headless Client Component with the browser-native `EventSource` API.
+
+```tsx
+// components/tickets/TicketStream.tsx
+"use client";
+
+import { useEffect } from "react";
+import { useRouter } from "next/navigation";
+import { env } from "@/config/env";
+
+export function TicketStream() {
+  const router = useRouter();
+
+  useEffect(() => {
+    const eventSource = new EventSource(`${env.apiUrl}/events/tickets/stream`);
+
+    eventSource.addEventListener("ticket.updated", () => {
+      router.refresh();
+    });
+
+    eventSource.onerror = () => {
+      console.error("SSE connection error");
+    };
+
+    return () => {
+      eventSource.close();
+    };
+  }, [router]);
+
+  return null;
+}
+```
+
+**Usage in pages:**
+
+```tsx
+// app/tickets/page.tsx
+import { TicketStream } from "@/components/tickets/TicketStream";
+
+export default function TicketsPage() {
+  return (
+    <>
+      <TicketStream />  {/* Invisible, listens for updates */}
+      <TicketList />
+    </>
+  );
+}
+```
+
+**How it works:**
+
+1. `TicketStream` renders nothing (`return null`) — it is a headless component
+2. `EventSource` opens a persistent HTTP connection to the SSE endpoint
+3. When the backend emits a `ticket.updated` event, the listener fires
+4. `router.refresh()` re-fetches all Server Components on the current page
+5. Next.js re-renders the page with fresh data from the API
+
+**Key points:**
+- The SSE connection is per-tab — each open tab maintains its own connection
+- `EventSource` automatically reconnects if the connection drops
+- The backend SSE endpoint uses `text/event-stream` content type
+- The event name in the SSE stream must match `addEventListener("ticket.updated", ...)`
+
 ---
 
 ## State Management
@@ -323,14 +389,16 @@ As the app grows, consider introducing:
 
 ## Handling Asynchronous AI State
 
-Tickets move from `PROCESSING` to `ANALYZED` asynchronously. The frontend represents this explicitly:
+Tickets move from `PROCESSING` to `ANALYZED` asynchronously. The frontend handles this with Server-Sent Events (SSE):
 
 1. After creating a ticket, the dashboard shows the ticket with status `PROCESSING`.
-2. The detail page may show AI fields as missing or with a loading indicator.
-3. The user refreshes the page (or a polling hook updates the data) to see the final `ANALYZED` state.
-4. Status badges use distinct colors to communicate state clearly.
+2. The detail page shows AI fields as missing or with a dash (`—`).
+3. When AI processing completes, the backend emits a `ticket.updated` event via SSE.
+4. The `TicketStream` component receives the event and calls `router.refresh()`.
+5. Next.js re-fetches the Server Components, and the page updates automatically.
+6. Status badges use distinct colors to communicate state clearly.
 
-Future enhancements can include polling, Server-Sent Events (SSE), or WebSocket updates to avoid manual refresh.
+No manual refresh is required. The update appears in near-real-time (<1 second from AI completion).
 
 ---
 
@@ -393,10 +461,16 @@ Next.js Frontend
 NestJS API
       |
       ├── Commands → CommandBus → CreateTicketHandler
-      └── Queries  → QueryBus  → GetTicketHandler / ListTicketsHandler
+      ├── Queries  → QueryBus  → GetTicketHandler / ListTicketsHandler
+      └── SSE      → TicketEventsController → EventEmitter2
+                                        ↑
+                                        │
+                              AnalyzeTicketHandler (emits after AI completes)
 ```
 
 The frontend treats the backend as a black-box API. It does not replicate Clean Architecture layers because Next.js already provides a page-and-component model that is sufficient for the current scope.
+
+For real-time updates, the frontend uses the browser-native `EventSource` API to subscribe to the SSE endpoint. The `TicketStream` component handles this transparently.
 
 ---
 

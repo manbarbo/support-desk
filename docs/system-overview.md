@@ -167,15 +167,20 @@ Infrastructure (Implementations)
 
 ---
 
-### Phase 3: Frontend Update
+### Phase 3: Frontend Update (Real-Time via SSE)
 
 ```text
-1. Frontend polls for ticket status OR
-2. WebSocket notification (future enhancement)
+1. AnalyzeTicketHandler completes and emits TicketUpdatedEvent
    ↓
-3. Frontend retrieves updated ticket via GET /tickets/:id
+2. EventEmitter2 broadcasts 'ticket.updated' in-process
    ↓
-4. Ticket now shows:
+3. TicketEventsController pushes event to SSE stream
+   ↓
+4. Frontend TicketStream component receives event
+   ↓
+5. router.refresh() re-fetches Server Components
+   ↓
+6. Ticket now shows:
    - Status: ANALYZED
    - Priority: HIGH/MEDIUM/LOW
    - Category: ORDER/BILLING/etc.
@@ -183,6 +188,8 @@ Infrastructure (Implementations)
    - Confidence: 0.94
    - Suggested Response: "..."
 ```
+
+**Duration**: Near-instantaneous (<1 second from AI completion to UI update)
 
 ---
 
@@ -253,58 +260,54 @@ Infrastructure (Implementations)
 │  app/                    components/          features/           │
 │  ┌──────────────┐        ┌──────────────┐     ┌──────────────┐   │
 │  │ /tickets     │◄───────│ TicketList   │◄────│ tickets.api  │   │
-│  │ /tickets/new │        │ Create Form  │     │ use-tickets  │   │
+│  │ /tickets/new │        │ TicketStream │     │ use-tickets  │   │
 │  │ /tickets/:id │        │ StatusBadge  │     │ ticket.types │   │
-│  └──────────────┘        └──────────────┘     └──────────────┘   │
-│         │                           │                            │
-│         │ GET /tickets              │ POST /tickets               │
-│         │                           │                            │
-│         ▼                           ▼                            │
+│  └──────────────┘        └──────┬───────┘     └──────────────┘   │
+│         │                       │                                │
+│         │ GET /tickets          │ EventSource                    │
+│         │ POST /tickets         │ /events/tickets/stream         │
+│         │                       │                                │
+│         ▼                       ▼                                │
 ┌─────────────────────────────────────────────────────────────────┐
 │                      BACKEND API (NestJS)                        │
 │                                                                   │
 │  ┌──────────────────────────────────────────────────────────┐  │
 │  │                  Presentation Layer                       │  │
-│  │  TicketsController                                        │  │
+│  │  TicketsController    TicketEventsController (SSE)       │  │
 │  └──────────────────────────────────────────────────────────┘  │
-│                           │                                      │
-│                           ▼                                      │
+│         │                       ▲                                │
+│         ▼                       │                                │
 │  ┌──────────────────────────────────────────────────────────┐  │
 │  │                  Application Layer                        │  │
 │  │  CommandBus → CreateTicketHandler                        │  │
-│  │  CommandBus → AnalyzeTicketHandler                       │  │
+│  │  CommandBus → AnalyzeTicketHandler ──► TicketEventEmitter│  │
 │  │  QueryBus → GetTicketHandler                             │  │
 │  └──────────────────────────────────────────────────────────┘  │
-│                           │                                      │
-│                           ▼                                      │
+│         │                       ▲                                │
+│         ▼                       │                                │
 │  ┌──────────────────────────────────────────────────────────┐  │
 │  │                    Domain Layer                           │  │
 │  │  Ticket, TicketAnalysis, DomainEvent                     │  │
-│  │  TicketRepository, AIProvider, MessagePublisher          │  │
+│  │  TicketCreatedEvent, TicketUpdatedEvent                  │  │
 │  └──────────────────────────────────────────────────────────┘  │
-│                           │                                      │
-└───────────────────────────┼──────────────────────────────────────┘
-                            │
-              ┌─────────────┼─────────────┐
-              │             │             │
-              ▼             ▼             ▼
-┌──────────────────┐ ┌──────────┐ ┌──────────────────┐
-│   Supabase       │ │ RabbitMQ │ │   OpenCode AI    │
-│   (PostgreSQL)   │ │          │ │                  │
-│                  │ │ Exchange │ │                  │
-│ ┌──────────────┐ │ │   │      │ │ ┌──────────────┐ │
-│ │   tickets    │ │ │   ▼      │ │ │  AIProvider  │ │
-│ │              │ │ │ Queue    │ │ │     ▲        │ │
-│ │ - id         │ │ │   │      │ │ │     │        │ │
-│ │ - status     │ │ │   ▼      │ │ │ OpenCode     │ │
-│ │ - priority   │ │ │ Consumer │ │ │  Adapter     │ │
-│ │ - category   │ │ │   │      │ │ │              │ │
-│ │ - sentiment  │ │ │   ▼      │ │ └──────────────┘ │
-│ │ - confidence │ │ │  Retry   │ │                  │
-│ │ - response   │ │ │   │      │ │                  │
-│ └──────────────┘ │ │   ▼      │ │                  │
-│                  │ │  DLQ     │ │                  │
-└──────────────────┘ └──────────┘ └──────────────────┘
+│         │                                                        │
+└─────────┼────────────────────────────────────────────────────────┘
+          │
+          ├─────────────► Supabase (PostgreSQL)
+          │
+          └─────────────► RabbitMQ ──► AI Consumer ──► AI Provider
+                              │
+                              ▼
+                      EventEmitter2 (in-process)
+                              │
+                              ▼
+                    TicketEventsController
+                              │
+                              ▼
+                         SSE Stream
+                              │
+                              ▼
+                  Frontend EventSource
 ```
 
 ---
@@ -389,6 +392,23 @@ Infrastructure (Implementations)
 - Increased latency for failed messages
 - Need to configure retry parameters
 - Potential for duplicate processing
+
+---
+
+### 6. Server-Sent Events (SSE) for Real-Time Updates
+
+**Decision**: Use SSE with in-process EventEmitter2 to push ticket status updates to the frontend.
+
+**Rationale**:
+- AI processing takes 5-30 seconds; users shouldn't need to manually refresh
+- SSE is simpler than WebSocket for unidirectional server-to-client updates
+- EventEmitter2 keeps the SSE layer decoupled from RabbitMQ
+- Browser-native `EventSource` API requires no additional client libraries
+
+**Trade-offs**:
+- SSE connections are unidirectional (server → client only)
+- EventEmitter2 events are in-process (not distributed across multiple API instances)
+- Each connected client maintains an open HTTP connection
 
 ---
 
@@ -510,7 +530,7 @@ Infrastructure (Implementations)
 ### Short-term
 
 1. **DLQ Management API**: Endpoints to inspect and reprocess DLQ messages
-2. **WebSocket Updates**: Real-time ticket status updates to frontend
+2. ~~**WebSocket Updates**: Real-time ticket status updates to frontend~~ **Completed** via SSE (`/events/tickets/stream`)
 3. **Batch Processing**: Process multiple tickets in a single AI call
 4. **Caching Layer**: Redis cache for frequently accessed data
 

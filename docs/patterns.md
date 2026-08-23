@@ -572,6 +572,9 @@ The system uses NestJS modules to organize concerns and manage dependencies.
 
 ```text
 AppModule
+├── ConfigModule (global)
+├── EventEmitterModule (global, in-process events)
+├── GlobalCqrsModule (global)
 ├── InfrastructureModule
 │   ├── AIModule
 │   │   ├── OpenCodeAdapter
@@ -584,9 +587,71 @@ AppModule
 │       ├── RabbitMQConsumer
 │       ├── RabbitMQRetry
 │       └── TicketCreatedConsumer
+├── Controllers
+│   ├── TicketsController
+│   └── TicketEventsController (SSE)
+└── Application Services
+    └── TicketEventEmitterService
 ```
 
 Modules encapsulate related providers and expose only what's necessary through exports.
+
+---
+
+# Observer / Pub-Sub Pattern (EventEmitter2)
+
+The system uses the Observer pattern via `EventEmitter2` for in-process real-time event broadcasting.
+
+## Purpose
+
+When AI processing completes, the frontend needs to be notified instantly. Rather than polling, the backend pushes updates via SSE using an in-process event bus.
+
+## Components
+
+```text
+AnalyzeTicketHandler
+        │
+        ▼
+TicketEventEmitterService.emitTicketUpdated()
+        │
+        ▼
+EventEmitter2.emit('ticket.updated')
+        │
+        ┌────────────────────────┐
+        ▼                        ▼
+TicketEventsController    (any future subscriber)
+        │
+        ▼
+SSE Stream → Frontend
+```
+
+## Key Classes
+
+- **EventEmitter2** — The in-process event bus (from `@nestjs/event-emitter`)
+- **TicketEventEmitterService** — Typed wrapper that emits `ticket.updated` events
+- **TicketEventsController** — Subscribes to events and forwards them to SSE clients
+
+## Why In-Process?
+
+- EventEmitter2 runs in the same Node.js process — no network overhead
+- Events are not persisted or distributed across multiple API instances
+- This is intentional: SSE connections are per-server-instance anyway
+- For cross-process events, RabbitMQ is used instead
+
+## Relationship with RabbitMQ
+
+```text
+RabbitMQ (cross-process)          EventEmitter2 (in-process)
+    │                                    │
+    ▼                                    ▼
+ticket.created                    ticket.updated
+    │                                    │
+    ▼                                    ▼
+AI Consumer                        SSE Stream
+    │                                    │
+    ▼                                    ▼
+AnalyzeTicketHandler              Frontend
+```
 
 ---
 
@@ -617,6 +682,9 @@ Dependency Injection
 
 Event-driven architecture
 → asynchronous decoupling
+
+Observer / Pub-Sub
+→ real-time event broadcasting (SSE)
 
 Dead Letter Queue
 → controlled message failure handling

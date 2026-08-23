@@ -26,6 +26,25 @@ The messaging system is divided into two distinct layers:
 - Contains application-specific consumers (e.g., `TicketCreatedConsumer`)
 - Configures queues and exchanges for the application's needs
 
+**3. EventEmitter2 (In-Process Event Bus)**
+- Handles real-time notifications to connected clients (SSE)
+- Used for `ticket.updated` events after AI processing completes
+- Runs in the same Node.js process — no network overhead
+- Decoupled from RabbitMQ — the two systems serve different purposes
+
+```text
+RabbitMQ (cross-process)          EventEmitter2 (in-process)
+    │                                    │
+    ▼                                    ▼
+ticket.created                    ticket.updated
+    │                                    │
+    ▼                                    ▼
+AI Consumer                        SSE Stream
+    │                                    │
+    ▼                                    ▼
+AnalyzeTicketHandler              Frontend
+```
+
 ```text
 MessagingModule (Application-Specific)
     │
