@@ -494,11 +494,31 @@ export const SUPPORT_EVENTS_EXCHANGE: MessageExchangeConfig = {
 
 ---
 
-## DLQ Management
+## DLQ Management ✅ Completado
+
+### API Endpoints
+
+Administrative endpoints are available at `/admin/dlq`:
+
+```text
+GET    /admin/dlq                       - List messages in DLQ
+GET    /admin/dlq/:messageId            - Get message details
+POST   /admin/dlq/:messageId/reprocess  - Reprocess a message
+POST   /admin/dlq/reprocess-all         - Reprocess all messages
+DELETE /admin/dlq/:messageId            - Delete a message
+```
 
 ### Inspecting DLQ Messages
 
-You can inspect messages in the DLQ using RabbitMQ Management UI:
+You can inspect messages via the API or RabbitMQ Management UI:
+
+**Via API:**
+
+```bash
+curl http://localhost:3001/admin/dlq
+```
+
+**Via RabbitMQ UI:**
 
 1. Navigate to `http://localhost:15672`
 2. Go to **Queues** → `ticket.ai.processing.dlq`
@@ -507,10 +527,17 @@ You can inspect messages in the DLQ using RabbitMQ Management UI:
 
 ### Reprocessing DLQ Messages
 
-To reprocess a message from the DLQ:
+**Via API:**
 
-1. Get the message from DLQ
-2. Publish it back to the main queue:
+```bash
+# Reprocess a specific message
+curl -X POST http://localhost:3001/admin/dlq/{messageId}/reprocess
+
+# Reprocess all messages
+curl -X POST http://localhost:3001/admin/dlq/reprocess-all
+```
+
+**Via RabbitMQ:**
 
 ```typescript
 channel.sendToQueue('ticket.ai.processing', message.content, {
@@ -522,20 +549,6 @@ channel.sendToQueue('ticket.ai.processing', message.content, {
   },
 });
 channel.ack(message);
-```
-
-3. The message will be processed again from the beginning
-
-### Future Enhancement: DLQ Management API
-
-Planned endpoints for DLQ management:
-
-```text
-GET    /admin/dlq                       - List messages in DLQ
-GET    /admin/dlq/:messageId            - Get message details
-POST   /admin/dlq/:messageId/reprocess  - Reprocess a message
-POST   /admin/dlq/reprocess-all         - Reprocess all messages
-DELETE /admin/dlq/:messageId            - Delete a message
 ```
 
 ---

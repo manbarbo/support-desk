@@ -572,7 +572,7 @@ Configuration: 20MB max size, 14-day retention, JSON format.
 
 ### Short-term
 
-1. **DLQ Management API**: Endpoints to inspect and reprocess DLQ messages
+1. ~~**DLQ Management API**: Endpoints to inspect and reprocess DLQ messages~~ **Completed** (`/admin/dlq`)
 2. ~~**WebSocket Updates**: Real-time ticket status updates to frontend~~ **Completed** via SSE (`/events/tickets/stream`)
 3. **Batch Processing**: Process multiple tickets in a single AI call
 4. **Caching Layer**: Redis cache for frequently accessed data

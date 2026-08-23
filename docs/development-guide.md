@@ -701,6 +701,67 @@ API_PORT=3002
 
 ---
 
+## DLQ Management
+
+Administrative endpoints for inspecting and managing messages in the Dead Letter Queue.
+
+### Endpoints
+
+| Method | Route | Description |
+|--------|-------|-------------|
+| `GET` | `/admin/dlq` | List messages in DLQ |
+| `GET` | `/admin/dlq/:messageId` | Get message details |
+| `POST` | `/admin/dlq/:messageId/reprocess` | Reprocess a message |
+| `POST` | `/admin/dlq/reprocess-all` | Reprocess all messages |
+| `DELETE` | `/admin/dlq/:messageId` | Delete a message |
+
+### Usage Examples
+
+**List DLQ messages:**
+
+```bash
+curl http://localhost:3001/admin/dlq
+```
+
+**Reprocess a specific message:**
+
+```bash
+curl -X POST http://localhost:3001/admin/dlq/{messageId}/reprocess
+```
+
+**Reprocess all messages:**
+
+```bash
+curl -X POST http://localhost:3001/admin/dlq/reprocess-all
+```
+
+**Delete a message:**
+
+```bash
+curl -X DELETE http://localhost:3001/admin/dlq/{messageId}
+```
+
+### Response Format
+
+```json
+{
+  "messages": [
+    {
+      "id": "message-id",
+      "content": { "ticketId": "uuid" },
+      "headers": { "x-retry-count": 3, "x-last-error": "Error" },
+      "timestamp": "2026-08-22T14:30:05.000Z",
+      "retryCount": 3,
+      "lastError": "OpenCode API error",
+      "originalQueue": "ticket.ai.processing"
+    }
+  ],
+  "total": 1
+}
+```
+
+---
+
 ## Development Commands
 
 ### Root Commands

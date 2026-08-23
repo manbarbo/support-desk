@@ -392,6 +392,38 @@ This prevents a permanently failing message from continuously blocking the queue
 
 ---
 
+# DLQ Management
+
+Administrative endpoints allow inspecting and reprocessing failed messages without accessing RabbitMQ directly.
+
+## Endpoints
+
+```text
+GET    /admin/dlq                       → List messages
+GET    /admin/dlq/:messageId            → Get message details
+POST   /admin/dlq/:messageId/reprocess  → Reprocess one message
+POST   /admin/dlq/reprocess-all         → Reprocess all messages
+DELETE /admin/dlq/:messageId            → Delete a message
+```
+
+## Architecture
+
+```text
+DLQController
+      │
+      ▼
+DLQManagementService
+      │
+      ▼
+RabbitMQDLQService
+      │
+      ├── listMessages()     → get + nack (peek)
+      ├── reprocessMessage() → get + publish to main queue + ack
+      └── deleteMessage()    → get + ack (remove)
+```
+
+---
+
 # AI Processing
 
 AI processing occurs outside the HTTP request lifecycle.
@@ -600,7 +632,8 @@ AppModule
 │   │   │   ├── RabbitMQTopology
 │   │   │   ├── RabbitMQMessagePublisher
 │   │   │   ├── RabbitMQConsumer
-│   │   │   └── RabbitMQRetry
+│   │   │   ├── RabbitMQRetry
+│   │   │   └── RabbitMQDLQService
 │   │   ├── TicketCreatedConsumer
 │   │   └── Messaging Types (broker-agnostic interfaces)
 │   └── DatabaseModule
@@ -609,9 +642,10 @@ AppModule
 ├── Controllers
 │   ├── TicketsController
 │   ├── TicketEventsController (SSE)
-│   └── DLQController
+│   └── DLQController (admin)
 └── Application Services
-    └── TicketEventEmitterService
+    ├── TicketEventEmitterService
+    └── DLQManagementService
 ```
 
 ## Messaging Module Architecture

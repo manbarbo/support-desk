@@ -7,11 +7,13 @@ import { LoggerModule } from './infrastructure/logging/logger.module';
 
 import { TicketsController } from '@presentation/controllers/tickets.controller';
 import { TicketEventsController } from '@presentation/controllers/ticket-events.controller';
+import { DLQController } from '@presentation/controllers/admin/dlq.controller';
 import { LoggingInterceptor } from './presentation/interceptors/logging.interceptor';
 
 import { COMMAND_HANDLERS } from '@application/commands';
 import { QUERY_HANDLERS } from '@application/queries';
 import { TicketEventEmitterService } from '@application/services/ticket-event-emitter.service';
+import { DLQManagementService } from '@application/services/dlq-management.service';
 
 @Module({
   imports: [
@@ -24,11 +26,12 @@ import { TicketEventEmitterService } from '@application/services/ticket-event-em
     InfrastructureModule,
     LoggerModule,
   ],
-  controllers: [TicketsController, TicketEventsController],
+  controllers: [TicketsController, TicketEventsController, DLQController],
   providers: [
     ...COMMAND_HANDLERS,
     ...QUERY_HANDLERS,
     TicketEventEmitterService,
+    DLQManagementService,
     LoggingInterceptor,
   ],
 })
