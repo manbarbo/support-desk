@@ -5,12 +5,9 @@ import { InfrastructureModule } from './infrastructure/infrastructure.module';
 
 import { TicketsController } from '@presentation/controllers/tickets.controller';
 
-import { CreateTicketHandler } from '@application/commands/tickets/create-ticket.handler';
-import { AnalyzeTicketHandler } from '@application/commands/tickets/analyze-ticket.handler';
-import { GetTicketHandler } from '@application/queries/tickets/get-ticket.handler';
+import { COMMAND_HANDLERS } from '@application/commands';
+import { QUERY_HANDLERS } from '@application/queries';
 
-const CommandHandlers = [CreateTicketHandler, AnalyzeTicketHandler];
-const QueryHandlers = [GetTicketHandler];
 @Module({
   imports: [
     ConfigModule.forRoot({
@@ -21,6 +18,6 @@ const QueryHandlers = [GetTicketHandler];
     InfrastructureModule,
   ],
   controllers: [TicketsController],
-  providers: [...CommandHandlers, ...QueryHandlers],
+  providers: [...COMMAND_HANDLERS, ...QUERY_HANDLERS],
 })
 export class AppModule {}
