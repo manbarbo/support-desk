@@ -133,6 +133,7 @@ RabbitMQTopology
 RabbitMQRetry
 OpenCodeAdapter
 SupportAgent
+WinstonLoggerService
 ```
 
 Infrastructure implements interfaces defined by the application or domain layers.
@@ -568,6 +569,7 @@ AppModule
 ├── ConfigModule (global)
 ├── EventEmitterModule (global, in-process events)
 ├── GlobalCqrsModule (global)
+├── LoggerModule (global, structured logging)
 ├── InfrastructureModule
 │   ├── AIModule
 │   │   ├── OpenCodeAdapter
@@ -608,6 +610,64 @@ The messaging system is divided into two layers:
 - Configures queues and exchanges for the application
 
 This separation allows changing the message broker without modifying application logic.
+
+---
+
+# Logger Architecture
+
+The logging system follows the same abstraction principle as messaging. Application and Domain layers depend on a `Logger` interface, while Infrastructure contains the Winston implementation.
+
+## Abstraction
+
+```text
+Application / Domain
+        │
+        ▼
+    Logger interface
+        │
+        ▼
+WinstonLoggerService
+        │
+        ▼
+   Winston Config
+        │
+        ├── Console
+        ├── Error logs (daily rotate)
+        └── Combined logs (daily rotate)
+```
+
+## Interface
+
+```typescript
+export const LOGGER = Symbol('LOGGER');
+
+export type LogMetadata = Record<string, unknown>;
+
+export interface Logger {
+  debug(message: string, metadata?: LogMetadata): void;
+  info(message: string, metadata?: LogMetadata): void;
+  warn(message: string, metadata?: LogMetadata): void;
+  error(message: string, metadata?: LogMetadata): void;
+}
+```
+
+## Usage
+
+```typescript
+constructor(@Inject(LOGGER) private readonly logger: Logger) {}
+
+this.logger.info('Ticket created', {
+  context: 'CreateTicketHandler',
+  ticketId: ticket.id,
+});
+```
+
+## Benefits
+
+- Application/Domain never imports Winston
+- Winston can be replaced with Pino, Bunyan, etc. without changing business logic
+- Structured metadata for observability
+- Consistent log format across the application
 
 ---
 
@@ -713,3 +773,4 @@ The following constraints should be preserved:
 9. Tests must be able to run without requiring real external AI calls.
 10. New infrastructure dependencies should not be introduced without a clear requirement.
 11. Real-time updates must use SSE with in-process EventEmitter2, not direct RabbitMQ-to-frontend connections.
+12. Logging must use the `Logger` interface (`@Inject(LOGGER)`), not Winston directly.

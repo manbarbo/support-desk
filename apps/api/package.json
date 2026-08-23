@@ -32,7 +32,9 @@
     "class-transformer": "^0.5.1",
     "class-validator": "^0.15.1",
     "reflect-metadata": "^0.2.2",
-    "rxjs": "^7.8.1"
+    "rxjs": "^7.8.1",
+    "winston": "^3.19.0",
+    "winston-daily-rotate-file": "^5.0.0"
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3.2.0",
@@ -90,6 +92,7 @@
       "!**/supabase.service.ts",
       "!**/supabase.types.ts",
       "!**/supabase-ticket.repository.ts",
+      "!**/winston.config.ts",
       "!**/*.e2e-spec.ts"
     ],
     "coverageDirectory": "../coverage",

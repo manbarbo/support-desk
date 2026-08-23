@@ -108,6 +108,47 @@ Infrastructure (Implementations)
 
 ---
 
+### 6. Logger (Winston)
+
+**Responsibilities**:
+- Structured logging across all layers
+- Console logging in development
+- File rotation in production
+- Consistent log format with context
+
+**Architecture**:
+
+```text
+Application / Domain
+        │
+        ▼
+    Logger interface (@Inject(LOGGER))
+        │
+        ▼
+WinstonLoggerService
+        │
+        ▼
+Winston Console + DailyRotateFile
+```
+
+**Log Format (Development)**:
+
+```text
+2026-08-23T21:30:12.123Z info [CreateTicketHandler] Ticket created {"ticketId":"123"}
+```
+
+**Log Files (Production)**:
+
+```text
+logs/
+├── error-2026-08-23.log      (errors only)
+└── combined-2026-08-23.log   (all levels)
+```
+
+Configuration: 20MB max size, 14-day retention, JSON format.
+
+---
+
 ## Complete System Flow
 
 ### Phase 1: Ticket Creation

@@ -3,6 +3,7 @@ import { ConfigModule } from '@nestjs/config';
 import { EventEmitterModule } from '@nestjs/event-emitter';
 import { GlobalCqrsModule } from './common/global-cqrs.module';
 import { InfrastructureModule } from './infrastructure/infrastructure.module';
+import { LoggerModule } from './infrastructure/logging/logger.module';
 
 import { TicketsController } from '@presentation/controllers/tickets.controller';
 import { TicketEventsController } from '@presentation/controllers/ticket-events.controller';
@@ -20,6 +21,7 @@ import { TicketEventEmitterService } from '@application/services/ticket-event-em
     EventEmitterModule.forRoot(),
     GlobalCqrsModule,
     InfrastructureModule,
+    LoggerModule,
   ],
   controllers: [TicketsController, TicketEventsController],
   providers: [

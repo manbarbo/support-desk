@@ -346,6 +346,68 @@ import { env } from '@/config/env';
 
 ---
 
+## Logger
+
+The application uses a structured logging system based on Winston, abstracted through a `Logger` interface.
+
+### Using the Logger
+
+Inject the logger in any service:
+
+```typescript
+import { Inject } from '@nestjs/common';
+import { LOGGER } from '@infrastructure/logging/logger.interface';
+import type { Logger } from '@infrastructure/logging/logger.interface';
+
+@Injectable()
+export class MyService {
+  constructor(@Inject(LOGGER) private readonly logger: Logger) {}
+
+  doSomething() {
+    this.logger.info('Something happened', {
+      context: 'MyService',
+      ticketId: '123',
+    });
+  }
+}
+```
+
+### Log Levels
+
+| Level | Usage |
+|-------|-------|
+| `debug` | Detailed diagnostic information |
+| `info` | Normal operations (ticket created, analyzed) |
+| `warn` | Unexpected but recoverable situations |
+| `error` | Failures requiring attention |
+
+### Log Format (Development)
+
+```text
+2026-08-23T21:30:12.123Z info [CreateTicketHandler] Ticket created {"ticketId":"123"}
+```
+
+### Log Files (Production)
+
+```text
+logs/
+├── error-YYYY-MM-DD.log      # Errors only
+└── combined-YYYY-MM-DD.log   # All levels
+```
+
+- Rotation: daily
+- Max size per file: 20MB
+- Retention: 14 days
+
+### Environment Configuration
+
+```env
+NODE_ENV=development   # Console only, debug level
+NODE_ENV=production    # Console + files, info level
+```
+
+---
+
 ## Testing the Frontend
 
 ### 1. Access the Dashboard
