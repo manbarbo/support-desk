@@ -4,6 +4,7 @@ import { getTicket } from "@/features/tickets/api/tickets.api";
 import { Header } from "@/components/layout/Header";
 import { TicketStatusBadge } from "@/components/tickets/TicketStatusBadge";
 import { TicketPriorityBadge } from "@/components/tickets/TicketPriorityBadge";
+import { TicketStream } from "@/components/tickets/TicketStream";
 
 export default async function TicketDetailPage({
   params,
@@ -22,6 +23,7 @@ export default async function TicketDetailPage({
 
   return (
     <>
+      <TicketStream />
       <Header />
       <main className="mx-auto max-w-4xl px-4 py-8 sm:px-6 lg:px-8">
         <Link

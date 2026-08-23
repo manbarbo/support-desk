@@ -22,8 +22,8 @@ export default function NewTicketPage() {
     setError(null);
 
     try {
-      await createTicket(form);
-      router.push("/tickets");
+      const ticket = await createTicket(form);
+      router.push(`/tickets/${ticket.id}`);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to create ticket");
       setIsLoading(false);

@@ -1,12 +1,15 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
+import { EventEmitterModule } from '@nestjs/event-emitter';
 import { GlobalCqrsModule } from './common/global-cqrs.module';
 import { InfrastructureModule } from './infrastructure/infrastructure.module';
 
 import { TicketsController } from '@presentation/controllers/tickets.controller';
+import { TicketEventsController } from '@presentation/controllers/ticket-events.controller';
 
 import { COMMAND_HANDLERS } from '@application/commands';
 import { QUERY_HANDLERS } from '@application/queries';
+import { TicketEventEmitterService } from '@application/services/ticket-event-emitter.service';
 
 @Module({
   imports: [
@@ -14,10 +17,15 @@ import { QUERY_HANDLERS } from '@application/queries';
       envFilePath: '../../.env',
       isGlobal: true,
     }),
+    EventEmitterModule.forRoot(),
     GlobalCqrsModule,
     InfrastructureModule,
   ],
-  controllers: [TicketsController],
-  providers: [...COMMAND_HANDLERS, ...QUERY_HANDLERS],
+  controllers: [TicketsController, TicketEventsController],
+  providers: [
+    ...COMMAND_HANDLERS,
+    ...QUERY_HANDLERS,
+    TicketEventEmitterService,
+  ],
 })
 export class AppModule {}
