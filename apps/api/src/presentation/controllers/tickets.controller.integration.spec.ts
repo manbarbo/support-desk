@@ -10,12 +10,14 @@ import { ListTicketsHandler } from '@application/queries/tickets/list-tickets.ha
 import { TICKET_REPOSITORY } from '@domain/repositories/ticket.repository';
 import { MESSAGE_PUBLISHER } from '@domain/events/message-publisher.interface';
 import { AI_PROVIDER } from '@application/ports/ai-provider.interface';
+import { LOGGER } from '@infrastructure/logging/logger.interface';
 import { TicketEventEmitterService } from '@application/services/ticket-event-emitter.service';
 import {
   createMockTicket,
   createMockTicketRepository,
   createMockMessagePublisher,
   createMockAIProvider,
+  createMockLogger,
 } from '../../__mocks__/mocks';
 
 describe('TicketsController (Integration)', () => {
@@ -38,6 +40,7 @@ describe('TicketsController (Integration)', () => {
         { provide: TICKET_REPOSITORY, useValue: ticketRepository },
         { provide: MESSAGE_PUBLISHER, useValue: messagePublisher },
         { provide: AI_PROVIDER, useValue: createMockAIProvider() },
+        { provide: LOGGER, useValue: createMockLogger() },
         {
           provide: TicketEventEmitterService,
           useValue: { emitTicketUpdated: jest.fn() },

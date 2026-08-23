@@ -13,6 +13,7 @@ import {
   createMockTicketRepository,
   createMockMessagePublisher,
   createMockAIProvider,
+  createMockLogger,
 } from '../../../__mocks__/mocks';
 
 describe('Ticket Pipeline (Integration)', () => {
@@ -24,21 +25,24 @@ describe('Ticket Pipeline (Integration)', () => {
   let messagePublisher: ReturnType<typeof createMockMessagePublisher>;
   let aiProvider: ReturnType<typeof createMockAIProvider>;
   let ticketEventEmitter: { emitTicketUpdated: jest.Mock };
+  let logger: ReturnType<typeof createMockLogger>;
 
   beforeAll(() => {
     ticketRepository = createMockTicketRepository();
     messagePublisher = createMockMessagePublisher();
     aiProvider = createMockAIProvider();
     ticketEventEmitter = { emitTicketUpdated: jest.fn() };
+    logger = createMockLogger();
 
-    createHandler = new CreateTicketHandler(ticketRepository, messagePublisher);
+    createHandler = new CreateTicketHandler(ticketRepository, messagePublisher, logger);
     analyzeHandler = new AnalyzeTicketHandler(
       ticketRepository,
       aiProvider,
       ticketEventEmitter as any,
+      logger,
     );
-    getHandler = new GetTicketHandler(ticketRepository);
-    listHandler = new ListTicketsHandler(ticketRepository);
+    getHandler = new GetTicketHandler(ticketRepository, logger);
+    listHandler = new ListTicketsHandler(ticketRepository, logger);
   });
 
   beforeEach(() => {

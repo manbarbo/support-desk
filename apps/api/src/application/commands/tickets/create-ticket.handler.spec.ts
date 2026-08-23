@@ -3,26 +3,32 @@ import { CreateTicketHandler } from './create-ticket.handler';
 import { CreateTicketCommand } from './create-ticket.command';
 import { TICKET_REPOSITORY } from '@domain/repositories/ticket.repository';
 import { MESSAGE_PUBLISHER } from '@domain/events/message-publisher.interface';
+import { LOGGER } from '@infrastructure/logging/logger.interface';
 import { TicketStatus } from '@domain/enums/ticket-status.enum';
 import {
+  createMockTicket,
   createMockTicketRepository,
   createMockMessagePublisher,
+  createMockLogger,
 } from '../../../__mocks__/mocks';
 
 describe('CreateTicketHandler', () => {
   let handler: CreateTicketHandler;
   let ticketRepository: ReturnType<typeof createMockTicketRepository>;
   let messagePublisher: ReturnType<typeof createMockMessagePublisher>;
+  let logger: ReturnType<typeof createMockLogger>;
 
   beforeEach(async () => {
     ticketRepository = createMockTicketRepository();
     messagePublisher = createMockMessagePublisher();
+    logger = createMockLogger();
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         CreateTicketHandler,
         { provide: TICKET_REPOSITORY, useValue: ticketRepository },
         { provide: MESSAGE_PUBLISHER, useValue: messagePublisher },
+        { provide: LOGGER, useValue: logger },
       ],
     }).compile();
 
@@ -102,8 +108,40 @@ describe('CreateTicketHandler', () => {
 
       expect(result1.id).not.toBe(result2.id);
     });
+
+    it('should log ticket creation', async () => {
+      await handler.execute(command);
+
+      expect(logger.info).toHaveBeenCalledWith(
+        'Creating ticket',
+        expect.objectContaining({
+          context: 'CreateTicketHandler',
+          customerId: 'customer-123',
+        }),
+      );
+    });
+
+    it('should log ticket persistence', async () => {
+      await handler.execute(command);
+
+      expect(logger.info).toHaveBeenCalledWith(
+        'Ticket created and persisted',
+        expect.objectContaining({
+          context: 'CreateTicketHandler',
+          status: TicketStatus.PROCESSING,
+        }),
+      );
+    });
+
+    it('should log event publication', async () => {
+      await handler.execute(command);
+
+      expect(logger.info).toHaveBeenCalledWith(
+        'TicketCreatedEvent published',
+        expect.objectContaining({
+          context: 'CreateTicketHandler',
+        }),
+      );
+    });
   });
 });
-
-// Import for the test above
-import { createMockTicket } from '../../../__mocks__/mocks';

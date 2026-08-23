@@ -13,6 +13,8 @@ import {
   type MessagePublisher,
 } from '@domain/events/message-publisher.interface';
 import { TicketCreatedEvent } from '@domain/events/ticket-created.event';
+import { LOGGER } from '@infrastructure/logging/logger.interface';
+import type { Logger } from '@infrastructure/logging/logger.interface';
 
 @CommandHandler(CreateTicketCommand)
 export class CreateTicketHandler implements ICommandHandler<
@@ -24,6 +26,8 @@ export class CreateTicketHandler implements ICommandHandler<
     private readonly ticketRepository: TicketRepository,
     @Inject(MESSAGE_PUBLISHER)
     private readonly messagePublisher: MessagePublisher,
+    @Inject(LOGGER)
+    private readonly logger: Logger,
   ) {}
 
   async execute(command: CreateTicketCommand): Promise<Ticket> {
@@ -39,9 +43,29 @@ export class CreateTicketHandler implements ICommandHandler<
       updatedAt: now,
     };
 
+    this.logger.info('Creating ticket', {
+      context: 'CreateTicketHandler',
+      ticketId: ticket.id,
+      customerId: ticket.customerId,
+      title: ticket.title,
+    });
+
     const createdTicket = await this.ticketRepository.create(ticket);
+
+    this.logger.info('Ticket created and persisted', {
+      context: 'CreateTicketHandler',
+      ticketId: createdTicket.id,
+      status: createdTicket.status,
+    });
+
     const event = new TicketCreatedEvent(createdTicket);
     this.messagePublisher.publish(event);
+
+    this.logger.info('TicketCreatedEvent published', {
+      context: 'CreateTicketHandler',
+      ticketId: createdTicket.id,
+      eventId: event.eventId,
+    });
 
     return createdTicket;
   }

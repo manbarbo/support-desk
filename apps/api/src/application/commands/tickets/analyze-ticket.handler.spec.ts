@@ -3,6 +3,7 @@ import { AnalyzeTicketHandler } from './analyze-ticket.handler';
 import { AnalyzeTicketCommand } from './analyze-ticket.command';
 import { TICKET_REPOSITORY } from '@domain/repositories/ticket.repository';
 import { AI_PROVIDER } from '@application/ports/ai-provider.interface';
+import { LOGGER } from '@infrastructure/logging/logger.interface';
 import { TicketStatus } from '@domain/enums/ticket-status.enum';
 import { TicketEventEmitterService } from '@application/services/ticket-event-emitter.service';
 import {
@@ -10,6 +11,7 @@ import {
   createMockAnalysis,
   createMockTicketRepository,
   createMockAIProvider,
+  createMockLogger,
 } from '../../../__mocks__/mocks';
 
 describe('AnalyzeTicketHandler', () => {
@@ -17,11 +19,13 @@ describe('AnalyzeTicketHandler', () => {
   let ticketRepository: ReturnType<typeof createMockTicketRepository>;
   let aiProvider: ReturnType<typeof createMockAIProvider>;
   let ticketEventEmitter: { emitTicketUpdated: jest.Mock };
+  let logger: ReturnType<typeof createMockLogger>;
 
   beforeEach(async () => {
     ticketRepository = createMockTicketRepository();
     aiProvider = createMockAIProvider();
     ticketEventEmitter = { emitTicketUpdated: jest.fn() };
+    logger = createMockLogger();
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -29,6 +33,7 @@ describe('AnalyzeTicketHandler', () => {
         { provide: TICKET_REPOSITORY, useValue: ticketRepository },
         { provide: AI_PROVIDER, useValue: aiProvider },
         { provide: TicketEventEmitterService, useValue: ticketEventEmitter },
+        { provide: LOGGER, useValue: logger },
       ],
     }).compile();
 
@@ -121,6 +126,49 @@ describe('AnalyzeTicketHandler', () => {
       ticketRepository.update.mockRejectedValue(new Error('Database write failed'));
 
       await expect(handler.execute(command)).rejects.toThrow('Database write failed');
+    });
+
+    it('should log analysis start', async () => {
+      await handler.execute(command);
+
+      expect(logger.info).toHaveBeenCalledWith(
+        'Starting ticket analysis',
+        expect.objectContaining({
+          context: 'AnalyzeTicketHandler',
+          ticketId: 'test-ticket-id-123',
+        }),
+      );
+    });
+
+    it('should log analysis completion', async () => {
+      await handler.execute(command);
+
+      expect(logger.info).toHaveBeenCalledWith(
+        'AI analysis completed',
+        expect.objectContaining({
+          context: 'AnalyzeTicketHandler',
+          category: expect.any(String),
+          priority: expect.any(String),
+        }),
+      );
+    });
+
+    it('should log when ticket not found', async () => {
+      ticketRepository.findById.mockResolvedValue(null);
+
+      try {
+        await handler.execute(command);
+      } catch {
+        // expected
+      }
+
+      expect(logger.error).toHaveBeenCalledWith(
+        'Ticket not found for analysis',
+        expect.objectContaining({
+          context: 'AnalyzeTicketHandler',
+          ticketId: 'test-ticket-id-123',
+        }),
+      );
     });
 
     it('should call methods in correct order', async () => {

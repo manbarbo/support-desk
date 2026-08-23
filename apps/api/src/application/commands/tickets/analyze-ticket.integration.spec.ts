@@ -6,6 +6,7 @@ import {
   createMockAnalysis,
   createMockTicketRepository,
   createMockAIProvider,
+  createMockLogger,
 } from '../../../__mocks__/mocks';
 
 describe('AnalyzeTicketHandler (Integration)', () => {
@@ -13,15 +14,18 @@ describe('AnalyzeTicketHandler (Integration)', () => {
   let ticketRepository: ReturnType<typeof createMockTicketRepository>;
   let aiProvider: ReturnType<typeof createMockAIProvider>;
   let ticketEventEmitter: { emitTicketUpdated: jest.Mock };
+  let logger: ReturnType<typeof createMockLogger>;
 
   beforeAll(() => {
     ticketRepository = createMockTicketRepository();
     aiProvider = createMockAIProvider();
     ticketEventEmitter = { emitTicketUpdated: jest.fn() };
+    logger = createMockLogger();
     handler = new AnalyzeTicketHandler(
       ticketRepository,
       aiProvider,
       ticketEventEmitter as any,
+      logger,
     );
   });
 
@@ -76,6 +80,21 @@ describe('AnalyzeTicketHandler (Integration)', () => {
     await expect(
       handler.execute(new AnalyzeTicketCommand('ticket-123')),
     ).rejects.toThrow('AI timeout');
+  });
+
+  it('should log analysis start', async () => {
+    ticketRepository.findById.mockResolvedValue(createMockTicket());
+    aiProvider.analyzeTicket.mockResolvedValue(createMockAnalysis());
+
+    await handler.execute(new AnalyzeTicketCommand('ticket-123'));
+
+    expect(logger.info).toHaveBeenCalledWith(
+      'Starting ticket analysis',
+      expect.objectContaining({
+        context: 'AnalyzeTicketHandler',
+        ticketId: 'ticket-123',
+      }),
+    );
   });
 
   it('should call methods in correct order', async () => {

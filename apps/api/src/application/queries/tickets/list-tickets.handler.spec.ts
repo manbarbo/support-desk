@@ -2,25 +2,30 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { ListTicketsHandler } from './list-tickets.handler';
 import { ListTicketsQuery } from './list-tickets.query';
 import { TICKET_REPOSITORY } from '@domain/repositories/ticket.repository';
+import { LOGGER } from '@infrastructure/logging/logger.interface';
 import { TicketStatus } from '@domain/enums/ticket-status.enum';
 import { TicketPriority } from '@domain/enums/ticket-priority.enum';
 import { TicketCategory } from '@domain/enums/ticket-category.enum';
 import {
   createMockTicket,
   createMockTicketRepository,
+  createMockLogger,
 } from '../../../__mocks__/mocks';
 
 describe('ListTicketsHandler', () => {
   let handler: ListTicketsHandler;
   let ticketRepository: ReturnType<typeof createMockTicketRepository>;
+  let logger: ReturnType<typeof createMockLogger>;
 
   beforeEach(async () => {
     ticketRepository = createMockTicketRepository();
+    logger = createMockLogger();
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         ListTicketsHandler,
         { provide: TICKET_REPOSITORY, useValue: ticketRepository },
+        { provide: LOGGER, useValue: logger },
       ],
     }).compile();
 
@@ -107,6 +112,33 @@ describe('ListTicketsHandler', () => {
 
       await expect(handler.execute(new ListTicketsQuery())).rejects.toThrow(
         'DB connection failed',
+      );
+    });
+
+    it('should log listing tickets', async () => {
+      ticketRepository.findAll.mockResolvedValue([]);
+
+      await handler.execute(new ListTicketsQuery({ status: 'ANALYZED' }));
+
+      expect(logger.debug).toHaveBeenCalledWith(
+        'Listing tickets',
+        expect.objectContaining({
+          context: 'ListTicketsHandler',
+        }),
+      );
+    });
+
+    it('should log tickets retrieved count', async () => {
+      ticketRepository.findAll.mockResolvedValue([createMockTicket()]);
+
+      await handler.execute(new ListTicketsQuery());
+
+      expect(logger.debug).toHaveBeenCalledWith(
+        'Tickets retrieved',
+        expect.objectContaining({
+          context: 'ListTicketsHandler',
+          count: 1,
+        }),
       );
     });
   });

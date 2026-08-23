@@ -2,25 +2,28 @@ import { CreateTicketHandler } from './create-ticket.handler';
 import { CreateTicketCommand } from './create-ticket.command';
 import { TicketStatus } from '@domain/enums/ticket-status.enum';
 import {
-  createMockTicket,
   createMockTicketRepository,
   createMockMessagePublisher,
+  createMockLogger,
 } from '../../../__mocks__/mocks';
 
 describe('CreateTicketHandler (Integration)', () => {
   let handler: CreateTicketHandler;
   let ticketRepository: ReturnType<typeof createMockTicketRepository>;
   let messagePublisher: ReturnType<typeof createMockMessagePublisher>;
+  let logger: ReturnType<typeof createMockLogger>;
 
   beforeAll(() => {
     ticketRepository = createMockTicketRepository();
     messagePublisher = createMockMessagePublisher();
-    handler = new CreateTicketHandler(ticketRepository, messagePublisher);
+    logger = createMockLogger();
+    handler = new CreateTicketHandler(ticketRepository, messagePublisher, logger);
   });
 
   beforeEach(() => {
     ticketRepository.create.mockReset();
     messagePublisher.publish.mockReset();
+    logger.info.mockReset();
     ticketRepository.create.mockImplementation((ticket) => Promise.resolve(ticket));
   });
 
@@ -79,5 +82,19 @@ describe('CreateTicketHandler (Integration)', () => {
     await expect(
       handler.execute(new CreateTicketCommand('c1', 'Title', 'Desc')),
     ).rejects.toThrow('DB error');
+  });
+
+  it('should log ticket creation', async () => {
+    await handler.execute(
+      new CreateTicketCommand('customer-123', 'Order issue', 'My order is late'),
+    );
+
+    expect(logger.info).toHaveBeenCalledWith(
+      'Creating ticket',
+      expect.objectContaining({
+        context: 'CreateTicketHandler',
+        customerId: 'customer-123',
+      }),
+    );
   });
 });

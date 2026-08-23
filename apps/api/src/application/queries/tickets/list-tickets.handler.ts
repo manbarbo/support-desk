@@ -11,6 +11,8 @@ import {
 import { TicketStatus } from '@domain/enums/ticket-status.enum';
 import { TicketPriority } from '@domain/enums/ticket-priority.enum';
 import { TicketCategory } from '@domain/enums/ticket-category.enum';
+import { LOGGER } from '@infrastructure/logging/logger.interface';
+import type { Logger } from '@infrastructure/logging/logger.interface';
 
 @QueryHandler(ListTicketsQuery)
 export class ListTicketsHandler implements IQueryHandler<
@@ -20,6 +22,8 @@ export class ListTicketsHandler implements IQueryHandler<
   constructor(
     @Inject(TICKET_REPOSITORY)
     private readonly ticketRepository: TicketRepository,
+    @Inject(LOGGER)
+    private readonly logger: Logger,
   ) {}
 
   async execute(query: ListTicketsQuery): Promise<Ticket[]> {
@@ -41,6 +45,18 @@ export class ListTicketsHandler implements IQueryHandler<
       filters.customerId = query.filters.customerId;
     }
 
-    return this.ticketRepository.findAll(filters);
+    this.logger.debug('Listing tickets', {
+      context: 'ListTicketsHandler',
+      filters,
+    });
+
+    const tickets = await this.ticketRepository.findAll(filters);
+
+    this.logger.debug('Tickets retrieved', {
+      context: 'ListTicketsHandler',
+      count: tickets.length,
+    });
+
+    return tickets;
   }
 }

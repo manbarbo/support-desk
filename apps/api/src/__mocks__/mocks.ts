@@ -7,6 +7,7 @@ import { TicketSentiment } from '@domain/enums/ticket-sentiment.enum';
 import type { TicketRepository } from '@domain/repositories/ticket.repository';
 import type { MessagePublisher } from '@domain/events/message-publisher.interface';
 import type { AIProvider } from '@application/ports/ai-provider.interface';
+import type { Logger } from '@infrastructure/logging/logger.interface';
 
 export function createMockTicket(overrides?: Partial<Ticket>): Ticket {
   return {
@@ -56,5 +57,14 @@ export function createMockMessagePublisher(): MessagePublisher {
 export function createMockAIProvider(): AIProvider {
   return {
     analyzeTicket: jest.fn().mockResolvedValue(createMockAnalysis()),
+  };
+}
+
+export function createMockLogger(): Logger {
+  return {
+    debug: jest.fn(),
+    info: jest.fn(),
+    warn: jest.fn(),
+    error: jest.fn(),
   };
 }
