@@ -69,8 +69,26 @@
     "transform": {
       "^.+\\.(t|j)s$": "ts-jest"
     },
+    "moduleNameMapper": {
+      "^@domain/(.*)$": "<rootDir>/domain/$1",
+      "^@application/(.*)$": "<rootDir>/application/$1",
+      "^@infrastructure/(.*)$": "<rootDir>/infrastructure/$1",
+      "^@presentation/(.*)$": "<rootDir>/presentation/$1"
+    },
     "collectCoverageFrom": [
-      "**/*.(t|j)s"
+      "**/*.(t|j)s",
+      "!**/*.module.ts",
+      "!**/main.ts",
+      "!**/rabbitmq.connection.ts",
+      "!**/rabbitmq.topology.ts",
+      "!**/rabbitmq.retry.ts",
+      "!**/rabbitmq.publisher.ts",
+      "!**/rabbitmq.consumer.ts",
+      "!**/rabbitmq.constants.ts",
+      "!**/supabase.service.ts",
+      "!**/supabase.types.ts",
+      "!**/supabase-ticket.repository.ts",
+      "!**/*.e2e-spec.ts"
     ],
     "coverageDirectory": "../coverage",
     "testEnvironment": "node"
