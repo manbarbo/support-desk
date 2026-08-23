@@ -1,6 +1,8 @@
-import { Injectable, OnModuleDestroy } from '@nestjs/common';
+import { Inject, Injectable, OnModuleDestroy } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import * as amqp from 'amqplib';
+import { LOGGER } from '@infrastructure/logging/logger.interface';
+import type { Logger } from '@infrastructure/logging/logger.interface';
 
 @Injectable()
 export class RabbitMQConnection implements OnModuleDestroy {
@@ -11,7 +13,10 @@ export class RabbitMQConnection implements OnModuleDestroy {
 
   private readonly brokerUrl: string;
 
-  constructor(private readonly configService: ConfigService) {
+  constructor(
+    private readonly configService: ConfigService,
+    @Inject(LOGGER) private readonly logger: Logger,
+  ) {
     const brokerUrl = this.configService.get<string>('BROKER_URL');
 
     if (!brokerUrl) {
@@ -40,13 +45,17 @@ export class RabbitMQConnection implements OnModuleDestroy {
   }
 
   private async createConnection(): Promise<amqp.Channel> {
-    console.log('Connecting to RabbitMQ...');
+    this.logger.info('Connecting to RabbitMQ', {
+      context: 'RabbitMQConnection',
+    });
 
     this.connection = await amqp.connect(this.brokerUrl);
 
     this.channel = await this.connection.createChannel();
 
-    console.log('Connected to RabbitMQ');
+    this.logger.info('Connected to RabbitMQ', {
+      context: 'RabbitMQConnection',
+    });
 
     return this.channel;
   }

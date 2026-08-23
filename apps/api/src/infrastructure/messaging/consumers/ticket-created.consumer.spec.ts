@@ -2,22 +2,27 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { CommandBus } from '@nestjs/cqrs';
 import { TicketCreatedConsumer } from './ticket-created.consumer';
 import { RabbitMQConsumer } from '../rabbitmq/rabbitmq.consumer';
+import { LOGGER } from '@infrastructure/logging/logger.interface';
 import type { ConsumeMessage } from 'amqplib';
+import { createMockLogger } from '../../../__mocks__/mocks';
 
 describe('TicketCreatedConsumer', () => {
   let consumer: TicketCreatedConsumer;
   let mockRabbitMQConsumer: { consume: jest.Mock };
   let mockCommandBus: { execute: jest.Mock };
+  let logger: ReturnType<typeof createMockLogger>;
 
   beforeEach(async () => {
     mockRabbitMQConsumer = { consume: jest.fn().mockResolvedValue(undefined) };
     mockCommandBus = { execute: jest.fn().mockResolvedValue(undefined) };
+    logger = createMockLogger();
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         TicketCreatedConsumer,
         { provide: RabbitMQConsumer, useValue: mockRabbitMQConsumer },
         { provide: CommandBus, useValue: mockCommandBus },
+        { provide: LOGGER, useValue: logger },
       ],
     }).compile();
 
@@ -84,8 +89,6 @@ describe('TicketCreatedConsumer', () => {
     });
 
     it('should log the received event', async () => {
-      const consoleSpy = jest.spyOn(console, 'log').mockImplementation();
-
       const mockEvent = {
         eventType: 'ticket.created',
         eventId: 'event-789',
@@ -102,16 +105,17 @@ describe('TicketCreatedConsumer', () => {
 
       await messageHandler(message);
 
-      expect(consoleSpy).toHaveBeenCalledWith(
-        'Received event: ticket.created (event-789)',
+      expect(logger.info).toHaveBeenCalledWith(
+        'Received event',
+        expect.objectContaining({
+          context: 'TicketCreatedConsumer',
+          eventType: 'ticket.created',
+          eventId: 'event-789',
+        }),
       );
-
-      consoleSpy.mockRestore();
     });
 
     it('should log success after processing', async () => {
-      const consoleSpy = jest.spyOn(console, 'log').mockImplementation();
-
       const mockEvent = {
         eventType: 'ticket.created',
         eventId: 'event-success',
@@ -128,11 +132,13 @@ describe('TicketCreatedConsumer', () => {
 
       await messageHandler(message);
 
-      expect(consoleSpy).toHaveBeenCalledWith(
-        'Successfully processed event: event-success',
+      expect(logger.info).toHaveBeenCalledWith(
+        'Successfully processed event',
+        expect.objectContaining({
+          context: 'TicketCreatedConsumer',
+          eventId: 'event-success',
+        }),
       );
-
-      consoleSpy.mockRestore();
     });
 
     it('should propagate command execution errors', async () => {

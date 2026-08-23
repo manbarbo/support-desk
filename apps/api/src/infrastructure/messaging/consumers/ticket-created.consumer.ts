@@ -1,4 +1,4 @@
-import { Injectable, OnModuleInit } from '@nestjs/common';
+import { Inject, Injectable, OnModuleInit } from '@nestjs/common';
 import { CommandBus } from '@nestjs/cqrs';
 import type { ConsumeMessage } from 'amqplib';
 
@@ -9,12 +9,15 @@ import {
   SUPPORT_EVENTS_EXCHANGE,
   TICKET_CREATED_QUEUE,
 } from '../messaging.config';
+import { LOGGER } from '@infrastructure/logging/logger.interface';
+import type { Logger } from '@infrastructure/logging/logger.interface';
 
 @Injectable()
 export class TicketCreatedConsumer implements OnModuleInit {
   constructor(
     private readonly consumer: RabbitMQConsumer,
     private readonly commandBus: CommandBus,
+    @Inject(LOGGER) private readonly logger: Logger,
   ) {}
 
   async onModuleInit(): Promise<void> {
@@ -32,12 +35,21 @@ export class TicketCreatedConsumer implements OnModuleInit {
 
     const event = JSON.parse(content) as DomainEvent;
 
-    console.log(`Received event: ${event.eventType} (${event.eventId})`);
+    this.logger.info('Received event', {
+      context: 'TicketCreatedConsumer',
+      eventType: event.eventType,
+      eventId: event.eventId,
+      ticketId: event.aggregateId,
+    });
 
     const command = new AnalyzeTicketCommand(event.aggregateId);
 
     await this.commandBus.execute(command);
 
-    console.log(`Successfully processed event: ${event.eventId}`);
+    this.logger.info('Successfully processed event', {
+      context: 'TicketCreatedConsumer',
+      eventId: event.eventId,
+      ticketId: event.aggregateId,
+    });
   }
 }

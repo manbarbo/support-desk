@@ -729,6 +729,8 @@ This project demonstrates the following design patterns:
 - **Dead Letter Queue**: Resilient message processing
 - **Agent Tool Pattern**: Modular AI capabilities
 - **Broker Abstraction Pattern**: Message broker independence
+- **Logger Abstraction**: Structured logging with swappable implementation
+- **Interceptor Pattern**: Cross-cutting concerns (request/response logging)
 
 See `docs/patterns.md` for detailed explanations.
 

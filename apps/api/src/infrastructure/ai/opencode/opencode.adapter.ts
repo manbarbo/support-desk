@@ -1,6 +1,8 @@
-import { Injectable } from '@nestjs/common';
+import { Inject, Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Ticket } from '@domain/entities/ticket.entity';
+import { LOGGER } from '@infrastructure/logging/logger.interface';
+import type { Logger } from '@infrastructure/logging/logger.interface';
 
 interface OpenCodeResponse {
   category: string;
@@ -24,7 +26,10 @@ export class OpenCodeAdapter {
   private readonly baseUrl: string;
   private readonly model: string;
 
-  constructor(private readonly configService: ConfigService) {
+  constructor(
+    private readonly configService: ConfigService,
+    @Inject(LOGGER) private readonly logger: Logger,
+  ) {
     const apiKey = this.configService.get<string>('AI_API_KEY');
     const baseUrl = this.configService.get<string>('AI_BASE_URL');
     const model = this.configService.get<string>('AI_MODEL');
@@ -39,8 +44,26 @@ export class OpenCodeAdapter {
   }
 
   async getRawAnalysis(ticket: Ticket): Promise<Record<string, unknown>> {
+    this.logger.info('Starting AI analysis', {
+      context: 'OpenCodeAdapter',
+      ticketId: ticket.id,
+      model: this.model,
+    });
+
+    const start = Date.now();
     const prompt = this.buildPrompt(ticket);
     const response = await this.callAPI(prompt);
+    const duration = Date.now() - start;
+
+    this.logger.info('AI analysis completed', {
+      context: 'OpenCodeAdapter',
+      ticketId: ticket.id,
+      category: response.category,
+      priority: response.priority,
+      sentiment: response.sentiment,
+      confidence: response.confidence,
+      duration,
+    });
 
     return {
       category: response.category,
@@ -96,6 +119,11 @@ Respond ONLY with the JSON object, no additional text.
     });
 
     if (!response.ok) {
+      this.logger.error('OpenCode API error', {
+        context: 'OpenCodeAdapter',
+        status: response.status,
+        statusText: response.statusText,
+      });
       throw new Error(
         `OpenCode API error: ${response.status} ${response.statusText}`,
       );
@@ -105,13 +133,19 @@ Respond ONLY with the JSON object, no additional text.
     const content = data.choices[0]?.message.content;
 
     if (!content) {
+      this.logger.error('OpenCode returned empty response', {
+        context: 'OpenCodeAdapter',
+      });
       throw new Error('OpenCode returned an empty response');
     }
 
     try {
       return JSON.parse(content) as OpenCodeResponse;
     } catch (error) {
-      console.error('Failed to parse OpenCode response:', content, error);
+      this.logger.error('Failed to parse OpenCode response', {
+        context: 'OpenCodeAdapter',
+        content,
+      });
       throw new Error(`Failed to parse OpenCode response: ${content}`);
     }
   }

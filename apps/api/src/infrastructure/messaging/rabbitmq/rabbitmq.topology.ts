@@ -1,12 +1,17 @@
-import { Injectable } from '@nestjs/common';
+import { Inject, Injectable } from '@nestjs/common';
 import type { Channel } from 'amqplib';
 
 import { RabbitMQConnection } from './rabbitmq.connection';
 import type { MessageQueueConfig, MessageExchangeConfig } from '../messaging.types';
+import { LOGGER } from '@infrastructure/logging/logger.interface';
+import type { Logger } from '@infrastructure/logging/logger.interface';
 
 @Injectable()
 export class RabbitMQTopology {
-  constructor(private readonly connection: RabbitMQConnection) {}
+  constructor(
+    private readonly connection: RabbitMQConnection,
+    @Inject(LOGGER) private readonly logger: Logger,
+  ) {}
 
   async setupQueue(
     config: MessageQueueConfig,
@@ -28,7 +33,11 @@ export class RabbitMQTopology {
 
     await this.setupBindings(channel, config, exchange.name);
 
-    console.log(`RabbitMQ topology ready for queue '${config.queue}'`);
+    this.logger.info('RabbitMQ topology ready', {
+      context: 'RabbitMQTopology',
+      queue: config.queue,
+      exchange: exchange.name,
+    });
   }
 
   private async setupExchange(

@@ -406,6 +406,24 @@ NODE_ENV=development   # Console only, debug level
 NODE_ENV=production    # Console + files, info level
 ```
 
+### Logging Interceptor
+
+A global `LoggingInterceptor` automatically logs all HTTP request/response cycles:
+
+```text
+Request:  method, path, body (sanitized)
+Response: method, path, statusCode, duration
+Error:    method, path, statusCode, duration, error, stack
+```
+
+The interceptor is registered globally in `main.ts` and applies to all controllers.
+
+Sensitive fields (`password`, `token`, `secret`, `apiKey`, `key`) are automatically redacted from request bodies.
+
+### Log Coverage
+
+All application code uses the `Logger` interface. The only remaining `console.log` is the startup message in `main.ts` (before the logger is initialized).
+
 ---
 
 ## Testing the Frontend

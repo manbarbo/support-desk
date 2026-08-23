@@ -1,8 +1,10 @@
-import { Injectable } from '@nestjs/common';
+import { Inject, Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import type { Channel, ConsumeMessage } from 'amqplib';
 
 import { RabbitMQConnection } from './rabbitmq.connection';
+import { LOGGER } from '@infrastructure/logging/logger.interface';
+import type { Logger } from '@infrastructure/logging/logger.interface';
 
 export interface RetryConfig {
   retryQueue?: string;
@@ -18,6 +20,7 @@ export class RabbitMQRetry {
   constructor(
     private readonly connection: RabbitMQConnection,
     private readonly configService: ConfigService,
+    @Inject(LOGGER) private readonly logger: Logger,
   ) {
     this.maxRetries = parseInt(
       this.configService.get<string>('BROKER_MAX_RETRIES') ?? '3',
@@ -41,11 +44,11 @@ export class RabbitMQRetry {
 
     const content = message.content;
 
-    // Si no hay retry queue configurada, hacer reject inmediatamente
     if (!config.retryQueue) {
-      console.error(
-        `No retry queue configured for ${config.originalQueue}. Rejecting message.`,
-      );
+      this.logger.error('No retry queue configured, rejecting message', {
+        context: 'RabbitMQRetry',
+        queue: config.originalQueue,
+      });
       channel.nack(message, false, false);
       return;
     }
@@ -58,11 +61,11 @@ export class RabbitMQRetry {
       return;
     }
 
-    // Si no hay DLQ configurada, hacer reject después de los reintentos
     if (!config.deadLetterQueue) {
-      console.error(
-        `Max retries reached and no DLQ configured for ${config.originalQueue}. Rejecting message.`,
-      );
+      this.logger.error('Max retries reached and no DLQ configured, rejecting', {
+        context: 'RabbitMQRetry',
+        queue: config.originalQueue,
+      });
       channel.nack(message, false, false);
       return;
     }
@@ -87,9 +90,14 @@ export class RabbitMQRetry {
 
     const delay = this.calculateBackoff(newRetryCount);
 
-    console.log(
-      `Retry ${newRetryCount}/${this.maxRetries} ` + `after ${delay}ms`,
-    );
+    this.logger.warn('Retrying message', {
+      context: 'RabbitMQRetry',
+      queue: config.originalQueue,
+      retryCount: newRetryCount,
+      maxRetries: this.maxRetries,
+      delay,
+      error: error.message,
+    });
 
     channel.sendToQueue(config.retryQueue, content, {
       persistent: true,
@@ -116,9 +124,13 @@ export class RabbitMQRetry {
       throw new Error('Dead letter queue not configured');
     }
 
-    console.error(
-      `Max retries reached. ` + `Moving message to ${config.deadLetterQueue}`,
-    );
+    this.logger.error('Max retries reached, moving to DLQ', {
+      context: 'RabbitMQRetry',
+      queue: config.originalQueue,
+      dlq: config.deadLetterQueue,
+      retryCount,
+      error: error.message,
+    });
 
     channel.sendToQueue(config.deadLetterQueue, content, {
       persistent: true,

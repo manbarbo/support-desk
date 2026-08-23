@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Inject, Injectable } from '@nestjs/common';
 import type { SupabaseClient } from '@supabase/supabase-js';
 
 import { SupabaseService } from '../database/supabase.service';
@@ -17,6 +17,9 @@ import { TicketPriority } from '@domain/enums/ticket-priority.enum';
 import { TicketSentiment } from '@domain/enums/ticket-sentiment.enum';
 import { TicketStatus } from '@domain/enums/ticket-status.enum';
 
+import { LOGGER } from '@infrastructure/logging/logger.interface';
+import type { Logger } from '@infrastructure/logging/logger.interface';
+
 type TicketRow = Database['public']['Tables']['tickets']['Row'];
 type TicketUpdate = Database['public']['Tables']['tickets']['Update'];
 
@@ -24,11 +27,16 @@ type TicketUpdate = Database['public']['Tables']['tickets']['Update'];
 export class SupabaseTicketRepository implements TicketRepository {
   private readonly supabase: SupabaseClient<Database>;
 
-  constructor(private readonly supabaseService: SupabaseService) {
+  constructor(
+    private readonly supabaseService: SupabaseService,
+    @Inject(LOGGER) private readonly logger: Logger,
+  ) {
     this.supabase = this.supabaseService.getClient();
   }
 
   async create(ticket: Ticket): Promise<Ticket> {
+    const start = Date.now();
+
     const { data, error } = await this.supabase
       .from('tickets')
       .insert({
@@ -49,8 +57,21 @@ export class SupabaseTicketRepository implements TicketRepository {
       .single();
 
     if (error) {
+      this.logger.error('Failed to create ticket', {
+        context: 'SupabaseTicketRepository',
+        ticketId: ticket.id,
+        error: error.message,
+      });
       throw new Error(`Failed to create ticket: ${error.message}`);
     }
+
+    const duration = Date.now() - start;
+
+    this.logger.info('Ticket persisted', {
+      context: 'SupabaseTicketRepository',
+      ticketId: ticket.id,
+      duration,
+    });
 
     return this.mapToTicket(data);
   }
@@ -67,6 +88,11 @@ export class SupabaseTicketRepository implements TicketRepository {
         return null;
       }
 
+      this.logger.error('Failed to find ticket', {
+        context: 'SupabaseTicketRepository',
+        ticketId: id,
+        error: error.message,
+      });
       throw new Error(`Failed to find ticket: ${error.message}`);
     }
 
@@ -97,8 +123,18 @@ export class SupabaseTicketRepository implements TicketRepository {
     });
 
     if (error) {
+      this.logger.error('Failed to find tickets', {
+        context: 'SupabaseTicketRepository',
+        error: error.message,
+      });
       throw new Error(`Failed to find tickets: ${error.message}`);
     }
+
+    this.logger.debug('Tickets retrieved', {
+      context: 'SupabaseTicketRepository',
+      count: data.length,
+      filters,
+    });
 
     return data.map((row) => this.mapToTicket(row));
   }
@@ -152,8 +188,19 @@ export class SupabaseTicketRepository implements TicketRepository {
       .single();
 
     if (error) {
+      this.logger.error('Failed to update ticket', {
+        context: 'SupabaseTicketRepository',
+        ticketId: id,
+        error: error.message,
+      });
       throw new Error(`Failed to update ticket: ${error.message}`);
     }
+
+    this.logger.debug('Ticket updated', {
+      context: 'SupabaseTicketRepository',
+      ticketId: id,
+      fields: Object.keys(updateData).filter((k) => k !== 'updated_at'),
+    });
 
     return this.mapToTicket(data);
   }
@@ -196,8 +243,18 @@ export class SupabaseTicketRepository implements TicketRepository {
       .eq('id', id);
 
     if (error) {
+      this.logger.error('Failed to update ticket analysis', {
+        context: 'SupabaseTicketRepository',
+        ticketId: id,
+        error: error.message,
+      });
       throw new Error(`Failed to update ticket analysis: ${error.message}`);
     }
+
+    this.logger.debug('Ticket analysis persisted', {
+      context: 'SupabaseTicketRepository',
+      ticketId: id,
+    });
   }
 
   private mapToTicket(row: TicketRow): Ticket {

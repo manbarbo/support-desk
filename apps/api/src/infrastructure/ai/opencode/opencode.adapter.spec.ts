@@ -1,7 +1,8 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { ConfigService } from '@nestjs/config';
 import { OpenCodeAdapter } from './opencode.adapter';
-import { createMockTicket } from '../../../__mocks__/mocks';
+import { LOGGER } from '@infrastructure/logging/logger.interface';
+import { createMockTicket, createMockLogger } from '../../../__mocks__/mocks';
 
 // Mock global fetch
 const mockFetch = jest.fn();
@@ -10,6 +11,7 @@ global.fetch = mockFetch;
 describe('OpenCodeAdapter', () => {
   let adapter: OpenCodeAdapter;
   let configService: { get: jest.Mock };
+  let logger: ReturnType<typeof createMockLogger>;
 
   beforeEach(async () => {
     configService = {
@@ -22,11 +24,13 @@ describe('OpenCodeAdapter', () => {
         return config[key];
       }),
     };
+    logger = createMockLogger();
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         OpenCodeAdapter,
         { provide: ConfigService, useValue: configService },
+        { provide: LOGGER, useValue: logger },
       ],
     }).compile();
 
@@ -45,7 +49,7 @@ describe('OpenCodeAdapter', () => {
         return 'value';
       });
 
-      expect(() => new OpenCodeAdapter(configService as any)).toThrow(
+      expect(() => new OpenCodeAdapter(configService as any, logger)).toThrow(
         'AI configuration is incomplete',
       );
     });
@@ -56,7 +60,7 @@ describe('OpenCodeAdapter', () => {
         return 'value';
       });
 
-      expect(() => new OpenCodeAdapter(configService as any)).toThrow(
+      expect(() => new OpenCodeAdapter(configService as any, logger)).toThrow(
         'AI configuration is incomplete',
       );
     });
@@ -67,7 +71,7 @@ describe('OpenCodeAdapter', () => {
         return 'value';
       });
 
-      expect(() => new OpenCodeAdapter(configService as any)).toThrow(
+      expect(() => new OpenCodeAdapter(configService as any, logger)).toThrow(
         'AI configuration is incomplete',
       );
     });
@@ -198,6 +202,66 @@ describe('OpenCodeAdapter', () => {
 
       const body = JSON.parse(mockFetch.mock.calls[0][1].body);
       expect(body.temperature).toBe(0.3);
+    });
+
+    it('should log AI analysis start', async () => {
+      mockFetch.mockResolvedValue({
+        ok: true,
+        json: jest.fn().mockResolvedValue({
+          choices: [{ message: { content: JSON.stringify(mockAIResponse) } }],
+        }),
+      });
+
+      await adapter.getRawAnalysis(mockTicket);
+
+      expect(logger.info).toHaveBeenCalledWith(
+        'Starting AI analysis',
+        expect.objectContaining({
+          context: 'OpenCodeAdapter',
+          ticketId: mockTicket.id,
+        }),
+      );
+    });
+
+    it('should log AI analysis completion', async () => {
+      mockFetch.mockResolvedValue({
+        ok: true,
+        json: jest.fn().mockResolvedValue({
+          choices: [{ message: { content: JSON.stringify(mockAIResponse) } }],
+        }),
+      });
+
+      await adapter.getRawAnalysis(mockTicket);
+
+      expect(logger.info).toHaveBeenCalledWith(
+        'AI analysis completed',
+        expect.objectContaining({
+          context: 'OpenCodeAdapter',
+          confidence: 0.94,
+        }),
+      );
+    });
+
+    it('should log API errors', async () => {
+      mockFetch.mockResolvedValue({
+        ok: false,
+        status: 500,
+        statusText: 'Internal Server Error',
+      });
+
+      try {
+        await adapter.getRawAnalysis(mockTicket);
+      } catch {
+        // expected
+      }
+
+      expect(logger.error).toHaveBeenCalledWith(
+        'OpenCode API error',
+        expect.objectContaining({
+          context: 'OpenCodeAdapter',
+          status: 500,
+        }),
+      );
     });
   });
 });

@@ -5,12 +5,15 @@ import type { DomainEvent } from '@domain/events/domain-event';
 
 import { RabbitMQConnection } from './rabbitmq.connection';
 import { RABBITMQ_EXCHANGE } from './rabbitmq.constants';
+import { LOGGER } from '@infrastructure/logging/logger.interface';
+import type { Logger } from '@infrastructure/logging/logger.interface';
 
 @Injectable()
 export class RabbitMQMessagePublisher implements MessagePublisher {
   constructor(
     private readonly connection: RabbitMQConnection,
     @Inject(RABBITMQ_EXCHANGE) private readonly exchange: string,
+    @Inject(LOGGER) private readonly logger: Logger,
   ) {}
 
   async publish(event: DomainEvent): Promise<void> {
@@ -24,9 +27,18 @@ export class RabbitMQMessagePublisher implements MessagePublisher {
     });
 
     if (!published) {
-      console.warn(`RabbitMQ buffer is full for event ${event.eventId}`);
+      this.logger.warn('RabbitMQ buffer is full', {
+        context: 'RabbitMQMessagePublisher',
+        eventId: event.eventId,
+        eventType: event.eventType,
+      });
     }
 
-    console.log(`Published event: ${event.eventType} (${event.eventId})`);
+    this.logger.info('Event published', {
+      context: 'RabbitMQMessagePublisher',
+      eventType: event.eventType,
+      eventId: event.eventId,
+      exchange: this.exchange,
+    });
   }
 }

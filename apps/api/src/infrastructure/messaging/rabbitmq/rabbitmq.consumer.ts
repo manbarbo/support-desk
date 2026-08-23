@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Inject, Injectable } from '@nestjs/common';
 import type { Channel, ConsumeMessage } from 'amqplib';
 
 import { RabbitMQConnection } from './rabbitmq.connection';
@@ -8,6 +8,8 @@ import type {
   MessageQueueConfig,
   MessageExchangeConfig,
 } from '../messaging.types';
+import { LOGGER } from '@infrastructure/logging/logger.interface';
+import type { Logger } from '@infrastructure/logging/logger.interface';
 
 @Injectable()
 export class RabbitMQConsumer {
@@ -15,6 +17,7 @@ export class RabbitMQConsumer {
     private readonly connection: RabbitMQConnection,
     private readonly topology: RabbitMQTopology,
     private readonly retry: RabbitMQRetry,
+    @Inject(LOGGER) private readonly logger: Logger,
   ) {}
 
   async consume(
@@ -22,8 +25,6 @@ export class RabbitMQConsumer {
     exchange: MessageExchangeConfig,
     handler: (message: ConsumeMessage) => Promise<void>,
   ): Promise<void> {
-    // IMPORTANTE:
-    // Primero aseguramos que exchange + queues + bindings existen.
     await this.topology.setupQueue(config, exchange);
 
     const channel = await this.connection.getChannel();
@@ -38,7 +39,10 @@ export class RabbitMQConsumer {
       void this.process(channel, message, handler, config);
     });
 
-    console.log(`Consumer started: ${config.queue}`);
+    this.logger.info('Consumer started', {
+      context: 'RabbitMQConsumer',
+      queue: config.queue,
+    });
   }
 
   private async process(
@@ -67,14 +71,19 @@ export class RabbitMQConsumer {
     try {
       channel.ack(message);
 
-      console.log(`Message acknowledged from queue: ${queueName}`);
+      this.logger.debug('Message acknowledged', {
+        context: 'RabbitMQConsumer',
+        queue: queueName,
+      });
     } catch (ackError) {
       const errorMessage =
         ackError instanceof Error ? ackError.message : String(ackError);
 
-      console.error(
-        `Failed to acknowledge message from queue ${queueName}: ${errorMessage}`,
-      );
+      this.logger.error('Failed to acknowledge message', {
+        context: 'RabbitMQConsumer',
+        queue: queueName,
+        error: errorMessage,
+      });
     }
   }
 
@@ -94,10 +103,11 @@ export class RabbitMQConsumer {
       const errorMessage =
         retryError instanceof Error ? retryError.message : String(retryError);
 
-      console.error(
-        `Failed to handle message failure for queue ${config.queue}: ${errorMessage}. ` +
-          `Falling back to nack without requeue.`,
-      );
+      this.logger.error('Failed to handle message failure, falling back to nack', {
+        context: 'RabbitMQConsumer',
+        queue: config.queue,
+        error: errorMessage,
+      });
 
       try {
         channel.nack(message, false, false);
@@ -105,10 +115,11 @@ export class RabbitMQConsumer {
         const nackErrorMessage =
           nackError instanceof Error ? nackError.message : String(nackError);
 
-        console.error(
-          `Critical: Failed to nack message from queue ${config.queue}: ${nackErrorMessage}. ` +
-            `Message may remain unacknowledged and could be redelivered.`,
-        );
+        this.logger.error('Critical: Failed to nack message', {
+          context: 'RabbitMQConsumer',
+          queue: config.queue,
+          error: nackErrorMessage,
+        });
       }
     }
   }

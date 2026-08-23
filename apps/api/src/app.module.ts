@@ -7,6 +7,7 @@ import { LoggerModule } from './infrastructure/logging/logger.module';
 
 import { TicketsController } from '@presentation/controllers/tickets.controller';
 import { TicketEventsController } from '@presentation/controllers/ticket-events.controller';
+import { LoggingInterceptor } from './presentation/interceptors/logging.interceptor';
 
 import { COMMAND_HANDLERS } from '@application/commands';
 import { QUERY_HANDLERS } from '@application/queries';
@@ -28,6 +29,7 @@ import { TicketEventEmitterService } from '@application/services/ticket-event-em
     ...COMMAND_HANDLERS,
     ...QUERY_HANDLERS,
     TicketEventEmitterService,
+    LoggingInterceptor,
   ],
 })
 export class AppModule {}
