@@ -440,6 +440,25 @@ OpenCodeAdapter
 
 The domain and application layers do not depend on the OpenCode SDK.
 
+## AI Response Validation
+
+OpenCode responses are validated using Zod schemas at the adapter level:
+
+```typescript
+const OpenCodeResponseSchema = z.object({
+  category: z.enum(['ORDER', 'BILLING', 'TECHNICAL', 'ACCOUNT', 'GENERAL']),
+  priority: z.enum(['LOW', 'MEDIUM', 'HIGH', 'URGENT']),
+  sentiment: z.enum(['POSITIVE', 'NEUTRAL', 'NEGATIVE', 'FRUSTRATED', 'ANGRY']),
+  confidence: z.number().min(0).max(1),
+  suggestedResponse: z.string().min(1),
+});
+```
+
+This ensures:
+- Runtime validation (not just compile-time)
+- Descriptive error messages on invalid responses
+- Type-safe data passed to Agent Tools
+
 ---
 
 # AI Agent

@@ -11,24 +11,8 @@ export class SentimentAnalyzerTool implements AgentTool {
   readonly name = 'SentimentAnalyzerTool';
 
   async execute(input: AgentToolInput): Promise<AgentToolOutput> {
-    const { rawAnalysis } = input;
-    const sentiment = rawAnalysis.sentiment as string;
-
-    if (!sentiment) {
-      throw new Error('Sentiment not found in raw analysis');
-    }
-
-    const validatedSentiment = this.validateSentiment(sentiment);
-
     return {
-      sentiment: validatedSentiment,
+      sentiment: input.rawAnalysis.sentiment as TicketSentiment,
     };
-  }
-
-  private validateSentiment(value: string): TicketSentiment {
-    if (!Object.values(TicketSentiment).includes(value as TicketSentiment)) {
-      throw new Error(`Invalid sentiment: ${value}`);
-    }
-    return value as TicketSentiment;
   }
 }

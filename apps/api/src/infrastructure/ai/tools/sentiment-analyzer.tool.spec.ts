@@ -21,44 +21,24 @@ describe('SentimentAnalyzerTool', () => {
     expect(tool.name).toBe('SentimentAnalyzerTool');
   });
 
-  describe('execute', () => {
-    it('should return the validated sentiment', async () => {
+  it('should return the sentiment from rawAnalysis', async () => {
+    const result = await tool.execute({
+      ticket: createMockTicket(),
+      rawAnalysis: { sentiment: 'FRUSTRATED' },
+    });
+
+    expect(result).toEqual({ sentiment: 'FRUSTRATED' });
+  });
+
+  it('should handle all valid sentiments', async () => {
+    const sentiments = ['POSITIVE', 'NEUTRAL', 'NEGATIVE', 'FRUSTRATED', 'ANGRY'];
+
+    for (const sentiment of sentiments) {
       const result = await tool.execute({
         ticket: createMockTicket(),
-        rawAnalysis: { sentiment: 'FRUSTRATED' },
+        rawAnalysis: { sentiment },
       });
-
-      expect(result).toEqual({ sentiment: 'FRUSTRATED' });
-    });
-
-    it('should handle all valid sentiments', async () => {
-      const sentiments = ['POSITIVE', 'NEUTRAL', 'NEGATIVE', 'FRUSTRATED', 'ANGRY'];
-
-      for (const sentiment of sentiments) {
-        const result = await tool.execute({
-          ticket: createMockTicket(),
-          rawAnalysis: { sentiment },
-        });
-        expect(result).toEqual({ sentiment });
-      }
-    });
-
-    it('should throw when sentiment is missing', async () => {
-      await expect(
-        tool.execute({
-          ticket: createMockTicket(),
-          rawAnalysis: {},
-        }),
-      ).rejects.toThrow('Sentiment not found in raw analysis');
-    });
-
-    it('should throw when sentiment is invalid', async () => {
-      await expect(
-        tool.execute({
-          ticket: createMockTicket(),
-          rawAnalysis: { sentiment: 'HAPPY' },
-        }),
-      ).rejects.toThrow('Invalid sentiment: HAPPY');
-    });
+      expect(result).toEqual({ sentiment });
+    }
   });
 });

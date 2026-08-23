@@ -649,6 +649,20 @@ Error: Supabase credentials not configured
 3. Check RabbitMQ UI for messages in queues
 4. Check DLQ for failed messages
 5. Verify OpenCode API is accessible
+6. If logs show `Invalid OpenCode response`, the AI returned malformed data — Zod validation caught it
+
+### Issue: Invalid OpenCode response
+
+**Symptoms**:
+- Error in logs: `Invalid OpenCode response: ...`
+- Ticket stays in "PROCESSING" status
+
+**Cause**: The AI model returned a response that doesn't match the expected schema (invalid category, confidence out of range, empty suggested response, etc.).
+
+**Solution**:
+1. Check the raw response in the error log
+2. Verify the AI prompt is clear
+3. Consider adjusting `temperature` in the adapter (lower = more deterministic)
 
 ---
 

@@ -106,6 +106,8 @@ Infrastructure (Implementations)
 
 **Integration**: Through `AIProvider` interface with `OpenCodeAdapter` implementation
 
+**Validation**: AI responses are validated using Zod schemas at the adapter level before being passed to Agent Tools. This ensures type safety and prevents invalid data from propagating.
+
 ---
 
 ### 6. Logger (Winston)

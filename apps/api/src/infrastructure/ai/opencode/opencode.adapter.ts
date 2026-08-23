@@ -3,14 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import { Ticket } from '@domain/entities/ticket.entity';
 import { LOGGER } from '@infrastructure/logging/logger.interface';
 import type { Logger } from '@infrastructure/logging/logger.interface';
-
-interface OpenCodeResponse {
-  category: string;
-  priority: string;
-  sentiment: string;
-  confidence: number;
-  suggestedResponse: string;
-}
+import { OpenCodeResponseSchema } from './opencode-response.schema';
 
 interface OpenCodeChatCompletionResponse {
   choices: Array<{
@@ -52,26 +45,35 @@ export class OpenCodeAdapter {
 
     const start = Date.now();
     const prompt = this.buildPrompt(ticket);
-    const response = await this.callAPI(prompt);
+    const rawResponse = await this.callAPI(prompt);
     const duration = Date.now() - start;
+
+    const validationResult = OpenCodeResponseSchema.safeParse(rawResponse);
+
+    if (!validationResult.success) {
+      this.logger.error('Invalid OpenCode response', {
+        context: 'OpenCodeAdapter',
+        ticketId: ticket.id,
+        errors: validationResult.error.issues,
+        rawResponse,
+      });
+
+      throw new Error(
+        `Invalid OpenCode response: ${validationResult.error.message}`,
+      );
+    }
 
     this.logger.info('AI analysis completed', {
       context: 'OpenCodeAdapter',
       ticketId: ticket.id,
-      category: response.category,
-      priority: response.priority,
-      sentiment: response.sentiment,
-      confidence: response.confidence,
+      category: validationResult.data.category,
+      priority: validationResult.data.priority,
+      sentiment: validationResult.data.sentiment,
+      confidence: validationResult.data.confidence,
       duration,
     });
 
-    return {
-      category: response.category,
-      priority: response.priority,
-      sentiment: response.sentiment,
-      confidence: response.confidence,
-      suggestedResponse: response.suggestedResponse,
-    };
+    return validationResult.data;
   }
 
   private buildPrompt(ticket: Ticket): string {
@@ -94,7 +96,7 @@ Respond ONLY with the JSON object, no additional text.
     `.trim();
   }
 
-  private async callAPI(prompt: string): Promise<OpenCodeResponse> {
+  private async callAPI(prompt: string): Promise<Record<string, unknown>> {
     const response = await fetch(`${this.baseUrl}/chat/completions`, {
       method: 'POST',
       headers: {
@@ -140,7 +142,7 @@ Respond ONLY with the JSON object, no additional text.
     }
 
     try {
-      return JSON.parse(content) as OpenCodeResponse;
+      return JSON.parse(content) as Record<string, unknown>;
     } catch (error) {
       this.logger.error('Failed to parse OpenCode response', {
         context: 'OpenCodeAdapter',

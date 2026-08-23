@@ -21,44 +21,24 @@ describe('PriorityAnalyzerTool', () => {
     expect(tool.name).toBe('PriorityAnalyzerTool');
   });
 
-  describe('execute', () => {
-    it('should return the validated priority', async () => {
+  it('should return the priority from rawAnalysis', async () => {
+    const result = await tool.execute({
+      ticket: createMockTicket(),
+      rawAnalysis: { priority: 'HIGH' },
+    });
+
+    expect(result).toEqual({ priority: 'HIGH' });
+  });
+
+  it('should handle all valid priorities', async () => {
+    const priorities = ['LOW', 'MEDIUM', 'HIGH', 'URGENT'];
+
+    for (const priority of priorities) {
       const result = await tool.execute({
         ticket: createMockTicket(),
-        rawAnalysis: { priority: 'HIGH' },
+        rawAnalysis: { priority },
       });
-
-      expect(result).toEqual({ priority: 'HIGH' });
-    });
-
-    it('should handle all valid priorities', async () => {
-      const priorities = ['LOW', 'MEDIUM', 'HIGH', 'URGENT'];
-
-      for (const priority of priorities) {
-        const result = await tool.execute({
-          ticket: createMockTicket(),
-          rawAnalysis: { priority },
-        });
-        expect(result).toEqual({ priority });
-      }
-    });
-
-    it('should throw when priority is missing', async () => {
-      await expect(
-        tool.execute({
-          ticket: createMockTicket(),
-          rawAnalysis: {},
-        }),
-      ).rejects.toThrow('Priority not found in raw analysis');
-    });
-
-    it('should throw when priority is invalid', async () => {
-      await expect(
-        tool.execute({
-          ticket: createMockTicket(),
-          rawAnalysis: { priority: 'CRITICAL' },
-        }),
-      ).rejects.toThrow('Invalid priority: CRITICAL');
-    });
+      expect(result).toEqual({ priority });
+    }
   });
 });
