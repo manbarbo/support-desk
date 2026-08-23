@@ -10,7 +10,7 @@ This document describes the architectural patterns used by AI Support Desk and t
 
 Each component should have one primary responsibility.
 
-Example:
+Examples:
 
 ```text
 CreateTicketHandler
@@ -20,17 +20,35 @@ SupabaseTicketRepository
     → Handles ticket persistence
 
 OpenCodeAdapter
-    → Communicates with OpenCode
+    → Communicates with OpenCode API
 
 RabbitMQMessagePublisher
-    → Publishes messages
+    → Publishes domain events
+
+RabbitMQConsumer
+    → Consumes messages from queues
+
+RabbitMQRetry
+    → Handles retry logic and DLQ
+
+RabbitMQConnection
+    → Manages RabbitMQ connection
+
+SupportAgent
+    → Orchestrates AI analysis tools
+
+TicketClassifierTool
+    → Classifies ticket category
+
+PriorityAnalyzerTool
+    → Analyzes ticket priority
 ```
 
-A class should not simultaneously handle persistence, AI processing, messaging and HTTP concerns.
+A class should not simultaneously handle persistence, AI processing, messaging, and HTTP concerns.
 
 ---
 
-# Open/Closed Principle
+## Open/Closed Principle
 
 Components should be open for extension while remaining closed for modification.
 
@@ -46,9 +64,23 @@ AIProvider
 
 Adding a new AI provider should not require modifying business logic.
 
+Example:
+
+```text
+AgentTool
+    │
+    ├── TicketClassifierTool
+    ├── PriorityAnalyzerTool
+    ├── SentimentAnalyzerTool
+    ├── ResponseGeneratorTool
+    └── FutureTool
+```
+
+Adding a new AI tool should not require modifying the SupportAgent.
+
 ---
 
-# Liskov Substitution Principle
+## Liskov Substitution Principle
 
 Implementations must be substitutable for their abstractions.
 
@@ -66,7 +98,7 @@ Both implementations must honor the behavior defined by `AIProvider`.
 
 ---
 
-# Interface Segregation Principle
+## Interface Segregation Principle
 
 Interfaces should be small and focused.
 
@@ -76,6 +108,19 @@ Example:
 interface TicketRepository {
   create(ticket: Ticket): Promise<Ticket>;
   findById(id: string): Promise<Ticket | null>;
+}
+
+interface MessagePublisher {
+  publish(event: DomainEvent): Promise<void>;
+}
+
+interface AIProvider {
+  analyzeTicket(ticket: Ticket): Promise<TicketAnalysis>;
+}
+
+interface AgentTool {
+  name: string;
+  execute(input: AgentToolInput): Promise<AgentToolOutput>;
 }
 ```
 
@@ -90,6 +135,7 @@ interface SupportService {
   classifyTicket();
   generateResponse();
   sendEmail();
+  publishMessage();
 }
 ```
 
@@ -97,7 +143,7 @@ Focused interfaces make dependencies explicit and easier to test.
 
 ---
 
-# Dependency Inversion Principle
+## Dependency Inversion Principle
 
 High-level application logic depends on abstractions.
 
@@ -113,21 +159,42 @@ SupabaseTicketRepository
 
 The application does not know which persistence technology is being used.
 
+```text
+SupportAgent
+        │
+        ▼
+AIProvider
+        ▲
+        │
+OpenCodeAdapter
+```
+
+The agent does not know which AI provider is being used.
+
 ---
 
 # Abstraction
 
 Infrastructure capabilities are exposed through interfaces.
 
-Example:
+Examples:
 
 ```typescript
 interface AIProvider {
   analyzeTicket(ticket: Ticket): Promise<TicketAnalysis>;
 }
+
+interface MessagePublisher {
+  publish(event: DomainEvent): Promise<void>;
+}
+
+interface TicketRepository {
+  create(ticket: Ticket): Promise<Ticket>;
+  findById(id: string): Promise<Ticket | null>;
+}
 ```
 
-The application interacts with the contract rather than the implementation.
+The application interacts with contracts rather than implementations.
 
 ---
 
@@ -149,11 +216,15 @@ The application can operate on `AIProvider` without knowing which concrete imple
 Another example:
 
 ```text
-TicketClassificationStrategy
+AgentTool
    │
-   ├── AIClassificationStrategy
-   └── RuleBasedClassificationStrategy
+   ├── TicketClassifierTool
+   ├── PriorityAnalyzerTool
+   ├── SentimentAnalyzerTool
+   └── ResponseGeneratorTool
 ```
+
+The SupportAgent can execute any tool that implements `AgentTool`.
 
 ---
 
@@ -272,7 +343,7 @@ For example:
 
 ```typescript
 @Injectable()
-export class RabbitMQPublisher {}
+export class RabbitMQConnection {}
 ```
 
 NestJS manages the lifecycle of this provider.
@@ -396,16 +467,19 @@ Consumer
   └── Failure
        │
        ▼
-     Retry
+     Retry Queue (with TTL)
        │
+       │ TTL expires
        ▼
-     Failure
+     Main Queue (requeued)
        │
-       ▼
-      DLQ
+       └── After max retries
+             │
+             ▼
+            DLQ
 ```
 
-This provides a controlled failure path.
+This provides a controlled failure path with exponential backoff.
 
 ---
 
@@ -421,16 +495,40 @@ interface AgentTool {
 }
 ```
 
-Possible tools:
+Implemented tools:
 
 ```text
 TicketClassifierTool
-SentimentAnalyzerTool
 PriorityAnalyzerTool
+SentimentAnalyzerTool
 ResponseGeneratorTool
 ```
 
 The abstraction allows new capabilities to be introduced without tightly coupling the agent to concrete implementations.
+
+---
+
+# Module Pattern (NestJS)
+
+The system uses NestJS modules to organize concerns and manage dependencies.
+
+```text
+AppModule
+├── InfrastructureModule
+│   ├── AIModule
+│   │   ├── OpenCodeAdapter
+│   │   ├── SupportAgent
+│   │   └── AgentTools
+│   └── MessagingModule
+│       ├── RabbitMQConnection
+│       ├── RabbitMQTopology
+│       ├── RabbitMQMessagePublisher
+│       ├── RabbitMQConsumer
+│       ├── RabbitMQRetry
+│       └── TicketCreatedConsumer
+```
+
+Modules encapsulate related providers and expose only what's necessary through exports.
 
 ---
 
@@ -464,6 +562,9 @@ Event-driven architecture
 
 Dead Letter Queue
 → controlled message failure handling
+
+Module Pattern
+→ organized dependency management
 ```
 
 Avoid adding patterns solely to increase the number of patterns in the codebase.
@@ -494,25 +595,74 @@ The patterns work together rather than existing independently.
      Repository Strategy  AIProvider
           │                 │
           ▼                 ▼
-      Supabase          Adapter
+      Supabase          Agent
+                             │
+                      ┌──────┼──────┐
+                      ▼      ▼      ▼
+                    Tools  Tools   Tools
                              │
                              ▼
-                          OpenCode
+                        OpenCode
+                        Adapter
 
-                  Commands
-                     │
-                     ▼
-                  RabbitMQ
-                     │
-                     ▼
-                 AI Worker
-                     │
-                     ▼
-                  AI Agent
-                     │
-              ┌──────┼──────┐
-              ▼      ▼      ▼
-            Tools  Tools   Tools
+                Commands
+                   │
+                   ▼
+                RabbitMQ
+                   │
+          ┌────────┼────────┐
+          ▼        ▼        ▼
+       Publisher  Consumer  Retry
+          │        │        │
+          ▼        ▼        ▼
+       Event    Command    DLQ
 ```
 
 The architecture therefore combines the patterns around clear responsibilities rather than treating them as isolated examples.
+
+---
+
+# Refactoring Principles
+
+The messaging system was refactored to improve separation of concerns:
+
+## Before
+
+```text
+TicketCreatedConsumer
+ ├── Connection management
+ ├── Channel management
+ ├── Exchange setup
+ ├── Queue setup
+ ├── Retry logic
+ ├── Backoff calculation
+ ├── DLQ handling
+ ├── ACK/NACK
+ └── Business logic
+```
+
+## After
+
+```text
+TicketCreatedConsumer
+ └── Business logic only
+
+RabbitMQConsumer
+ └── Message consumption + error handling
+
+RabbitMQConnection
+ └── Connection management
+
+RabbitMQTopology
+ └── Infrastructure setup
+
+RabbitMQRetry
+ └── Retry logic + DLQ
+```
+
+This refactoring applies:
+
+- **Single Responsibility**: Each class has one clear purpose
+- **Separation of Concerns**: Infrastructure separated from business logic
+- **Reusability**: Components can be reused for other consumers
+- **Testability**: Each component can be tested in isolation

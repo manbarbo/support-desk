@@ -50,6 +50,7 @@ Example:
 
 ```text
 TicketsController
+DLQController
 ```
 
 Presentation should not contain business logic.
@@ -76,6 +77,7 @@ CreateTicketHandler
 AnalyzeTicketHandler
 GetTicketHandler
 ListTicketsHandler
+SupportAgent
 ```
 
 The application layer depends on domain abstractions.
@@ -93,7 +95,10 @@ Ticket
 TicketStatus
 TicketPriority
 TicketCategory
+TicketSentiment
 TicketAnalysis
+DomainEvent
+TicketCreatedEvent
 ```
 
 The domain should remain independent from infrastructure.
@@ -119,8 +124,12 @@ Examples:
 ```text
 SupabaseTicketRepository
 RabbitMQMessagePublisher
-RabbitMQTicketConsumer
+RabbitMQConsumer
+RabbitMQConnection
+RabbitMQTopology
+RabbitMQRetry
 OpenCodeAdapter
+SupportAgent
 ```
 
 Infrastructure implements interfaces defined by the application or domain layers.
@@ -282,7 +291,7 @@ ticket.ai.processing
 
 ---
 
-# Message Lifecycle
+## Message Lifecycle
 
 ```text
 Producer
@@ -314,7 +323,7 @@ Consumer
 
 # Retry Strategy
 
-Transient failures should be retried.
+Transient failures should be retried with exponential backoff.
 
 Examples:
 
@@ -322,6 +331,26 @@ Examples:
 - Network failure
 - Temporary provider error
 - Temporary database failure
+
+Retry flow:
+
+```text
+Main Queue
+    │
+    ▼
+Consumer
+    │
+    ├── Success → ACK
+    │
+    └── Failure
+          │
+          ▼
+    Retry Queue (with TTL)
+          │
+          │ TTL expires
+          ▼
+    Main Queue (requeued)
+```
 
 After the configured retry limit, the message is routed to the Dead Letter Queue.
 
@@ -343,15 +372,15 @@ RabbitMQ
 AI Consumer
   │
   ▼
-Support Agent
+SupportAgent
   │
-  ├── Classification
-  ├── Priority
-  ├── Sentiment
-  └── Response generation
+  ├── TicketClassifierTool
+  ├── PriorityAnalyzerTool
+  ├── SentimentAnalyzerTool
+  └── ResponseGeneratorTool
   │
   ▼
-Ticket Analysis
+TicketAnalysis
   │
   ▼
 Supabase
@@ -381,14 +410,14 @@ The domain and application layers do not depend on the OpenCode SDK.
 
 # AI Agent
 
-The support agent can use specialized tools.
+The support agent uses specialized tools.
 
 ```text
 SupportAgent
      │
      ├── TicketClassifierTool
-     ├── SentimentAnalyzerTool
      ├── PriorityAnalyzerTool
+     ├── SentimentAnalyzerTool
      └── ResponseGeneratorTool
 ```
 
@@ -424,9 +453,9 @@ ANALYZED        FAILED
 RESOLVED
 ```
 
-The domain should control valid state transitions.
+The domain controls valid state transitions.
 
-Invalid transitions should produce domain errors.
+Invalid transitions produce domain errors.
 
 ---
 
@@ -494,6 +523,36 @@ Application
 ```
 
 Failures in AI processing should not cause the initial ticket creation request to fail after the ticket has been persisted.
+
+---
+
+# Module Organization
+
+The backend uses NestJS modules to organize concerns:
+
+```text
+AppModule
+├── ConfigModule (global)
+├── GlobalCqrsModule (global)
+├── InfrastructureModule
+│   ├── AIModule
+│   │   ├── OpenCodeAdapter
+│   │   ├── SupportAgent
+│   │   └── AgentTools
+│   ├── MessagingModule
+│   │   ├── RabbitMQConnection
+│   │   ├── RabbitMQTopology
+│   │   ├── RabbitMQMessagePublisher
+│   │   ├── RabbitMQConsumer
+│   │   ├── RabbitMQRetry
+│   │   └── TicketCreatedConsumer
+│   └── DatabaseModule
+│       ├── SupabaseService
+│       └── SupabaseTicketRepository
+└── Controllers
+    ├── TicketsController
+    └── DLQController
+```
 
 ---
 

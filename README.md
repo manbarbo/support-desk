@@ -7,17 +7,19 @@ The platform combines ticket management with asynchronous AI processing to autom
 ## Features
 
 - Customer support ticket management
-- Ticket categorization
-- Automatic priority detection
-- Sentiment analysis
+- Ticket categorization (ORDER, BILLING, TECHNICAL, ACCOUNT, GENERAL)
+- Automatic priority detection (LOW, MEDIUM, HIGH, URGENT)
+- Sentiment analysis (POSITIVE, NEUTRAL, NEGATIVE, FRUSTRATED, ANGRY)
 - AI-generated response suggestions
 - Asynchronous AI processing
 - Event-driven communication
-- RabbitMQ message broker
-- Retry and Dead Letter Queue processing
+- RabbitMQ message broker with retry and DLQ
+- Exponential backoff retry strategy
 - PostgreSQL persistence through Supabase
 - CQRS-based application flow
-- Web-based support dashboard
+- Clean Architecture
+- AI Agent with specialized tools
+- Web-based support dashboard (Next.js)
 
 ---
 
@@ -63,10 +65,10 @@ The platform combines ticket management with asynchronous AI processing to autom
                          └────────┬────────┘
                                   │
                                   ▼
-                           AI Processor
+                           AI Consumer
                                   │
                                   ▼
-                             AI Agent
+                             SupportAgent
                                   │
                          ┌────────┼────────┐
                          ▼        ▼        ▼
@@ -79,7 +81,7 @@ The platform combines ticket management with asynchronous AI processing to autom
 
 The API does not wait for AI processing to complete.
 
-When a ticket is created, the API stores the ticket and publishes an event to RabbitMQ. The AI processor consumes the event and performs the analysis asynchronously.
+When a ticket is created, the API stores the ticket and publishes an event to RabbitMQ. The AI consumer processes the event and performs the analysis asynchronously.
 
 ---
 
@@ -95,26 +97,34 @@ Next.js
 POST /tickets
  │
  ▼
-Create Ticket
+CreateTicketHandler
  │
- ├──────────────► Supabase
+ ├──────────────► Supabase (status: PROCESSING)
  │
  └──────────────► RabbitMQ
                        │
                        ▼
-                 AI Processor
+                 TicketCreatedConsumer
                        │
                        ▼
-                  AI Analysis
+                 AnalyzeTicketHandler
                        │
                        ▼
-                    Supabase
+                  SupportAgent
+                       │
+              ┌────────┼────────┐
+              ▼        ▼        ▼
+         Classify  Priority  Sentiment
+              │        │        │
+              └────────┼────────┘
+                       ▼
+              Generate Response
                        │
                        ▼
-                  Ticket Updated
+                  Supabase (status: ANALYZED)
 ```
 
-A newly created ticket can initially have the following state:
+A newly created ticket has the following state:
 
 ```json
 {
@@ -129,8 +139,46 @@ Once AI processing completes:
   "status": "ANALYZED",
   "priority": "HIGH",
   "category": "ORDER",
-  "sentiment": "FRUSTRATED"
+  "sentiment": "FRUSTRATED",
+  "confidence": 0.94,
+  "suggestedResponse": "We apologize for the delay..."
 }
+```
+
+---
+
+## Retry and Dead Letter Queue
+
+The system implements a robust retry mechanism with exponential backoff:
+
+```text
+Main Queue
+    │
+    ▼
+Consumer
+    │
+    ├── Success → ACK
+    │
+    └── Failure
+          │
+          ▼
+    Retry Queue (with TTL)
+          │
+          │ TTL expires (5s, 25s, 125s)
+          ▼
+    Main Queue (requeued)
+          │
+          └── After 3 retries
+                │
+                ▼
+           Dead Letter Queue (DLQ)
+```
+
+Configuration:
+
+```env
+BROKER_MAX_RETRIES=3
+BROKER_RETRY_BASE_DELAY=5000
 ```
 
 ---
@@ -139,13 +187,14 @@ Once AI processing completes:
 
 ## Frontend
 
-- Next.js
-- React
+- Next.js 16
+- React 19
 - TypeScript
+- Tailwind CSS
 
 ## Backend
 
-- NestJS
+- NestJS 11
 - TypeScript
 - NestJS CQRS
 
@@ -156,11 +205,12 @@ Once AI processing completes:
 
 ## Messaging
 
-- RabbitMQ
+- RabbitMQ 3 (with Management UI)
 
 ## AI
 
 - OpenCode API
+- Agent-based architecture with specialized tools
 
 ## Testing
 
@@ -170,6 +220,7 @@ Once AI processing completes:
 
 - Docker
 - Docker Compose
+- pnpm (monorepo)
 
 ---
 
@@ -179,31 +230,103 @@ Once AI processing completes:
 ai-support-desk/
 │
 ├── apps/
-│   ├── api/
+│   ├── api/                      # NestJS backend
 │   │   └── src/
+│   │       ├── domain/           # Business entities and interfaces
+│   │       ├── application/      # Commands, queries, handlers, agents
+│   │       ├── infrastructure/   # External implementations
+│   │       └── presentation/     # HTTP controllers
 │   │
-│   └── web/
-│       └── app/
+│   └── web/                      # Next.js frontend
+│       └── src/
+│           └── app/
 │
 ├── docs/
-│   ├── architecture.md
-│   └── patterns.md
+│   ├── architecture.md           # System architecture
+│   ├── patterns.md               # Design patterns
+│   ├── messaging.md              # RabbitMQ messaging system
+│   └── development-plan.md       # Development roadmap
 │
-├── AGENTS.md
+├── AGENTS.md                     # AI agent development rules
 ├── README.md
 ├── docker-compose.yml
-└── package.json
+├── package.json
+├── pnpm-workspace.yaml
+└── tsconfig.base.json
 ```
 
-The backend follows a Clean Architecture-inspired organization:
+The backend follows Clean Architecture:
 
 ```text
 api/src/
 │
 ├── domain/
+│   ├── entities/
+│   │   ├── ticket.entity.ts
+│   │   └── ticket-analysis.entity.ts
+│   ├── enums/
+│   │   ├── ticket-status.enum.ts
+│   │   ├── ticket-priority.enum.ts
+│   │   ├── ticket-category.enum.ts
+│   │   └── ticket-sentiment.enum.ts
+│   ├── events/
+│   │   ├── domain-event.ts
+│   │   ├── ticket-created.event.ts
+│   │   └── message-publisher.interface.ts
+│   └── repositories/
+│       └── ticket.repository.ts
+│
 ├── application/
+│   ├── commands/
+│   │   └── tickets/
+│   │       ├── create-ticket.command.ts
+│   │       ├── create-ticket.handler.ts
+│   │       ├── analyze-ticket.command.ts
+│   │       └── analyze-ticket.handler.ts
+│   ├── queries/
+│   │   └── tickets/
+│   │       ├── get-ticket.query.ts
+│   │       └── get-ticket.handler.ts
+│   ├── ports/
+│   │   ├── ai-provider.interface.ts
+│   │   └── agent-tool.interface.ts
+│   └── agents/
+│       ├── support-agent.ts
+│       └── tools/
+│           ├── ticket-classifier.tool.ts
+│           ├── priority-analyzer.tool.ts
+│           ├── sentiment-analyzer.tool.ts
+│           └── response-generator.tool.ts
+│
 ├── infrastructure/
+│   ├── ai/
+│   │   ├── ai.module.ts
+│   │   ├── opencode/
+│   │   │   └── opencode.adapter.ts
+│   │   └── tools/
+│   │       ├── ticket-classifier.tool.ts
+│   │       ├── priority-analyzer.tool.ts
+│   │       ├── sentiment-analyzer.tool.ts
+│   │       └── response-generator.tool.ts
+│   ├── database/
+│   │   ├── supabase.service.ts
+│   │   └── supabase.types.ts
+│   ├── messaging/
+│   │   ├── messaging.module.ts
+│   │   ├── rabbitmq/
+│   │   │   ├── rabbitmq.connection.ts
+│   │   │   ├── rabbitmq.topology.ts
+│   │   │   ├── rabbitmq.publisher.ts
+│   │   │   ├── rabbitmq.consumer.ts
+│   │   │   └── rabbitmq.retry.ts
+│   │   └── consumers/
+│   │       └── ticket-created.consumer.ts
+│   └── repositories/
+│       └── supabase-ticket.repository.ts
+│
 └── presentation/
+    └── controllers/
+        └── tickets.controller.ts
 ```
 
 ---
@@ -216,40 +339,18 @@ Supabase provides the PostgreSQL persistence layer.
 
 ```text
 tickets
-├── id
+├── id (UUID)
 ├── customer_id
 ├── title
 ├── description
-├── status
-├── priority
-├── category
+├── status (OPEN, PROCESSING, ANALYZED, FAILED, RESOLVED)
+├── priority (LOW, MEDIUM, HIGH, URGENT)
+├── category (ORDER, BILLING, TECHNICAL, ACCOUNT, GENERAL)
+├── sentiment (POSITIVE, NEUTRAL, NEGATIVE, FRUSTRATED, ANGRY)
+├── confidence (0.0 - 1.0)
+├── suggested_response
 ├── created_at
 └── updated_at
-```
-
-## Ticket Analyses
-
-```text
-ticket_analyses
-├── id
-├── ticket_id
-├── category
-├── priority
-├── sentiment
-├── confidence
-├── suggested_response
-└── created_at
-```
-
-## Messages
-
-```text
-messages
-├── id
-├── ticket_id
-├── role
-├── content
-└── created_at
 ```
 
 ---
@@ -261,7 +362,7 @@ RabbitMQ is used to process ticket-related operations asynchronously.
 ## Exchange
 
 ```text
-support.events
+support.events (topic)
 ```
 
 ## Routing Keys
@@ -275,18 +376,48 @@ ticket.responded
 ## Queues
 
 ```text
-ticket.ai.processing
-ticket.notifications
-ticket.ai.processing.dlq
+ticket.ai.processing           # Main processing queue
+ticket.ai.processing.retry     # Retry queue with TTL
+ticket.ai.processing.dlq       # Dead Letter Queue
 ```
+
+## Retry Configuration
+
+```env
+BROKER_URL=amqp://guest:guest@localhost:5672
+BROKER_MAX_RETRIES=3
+BROKER_RETRY_BASE_DELAY=5000  # 5 seconds
+```
+
+Exponential backoff: 5s → 25s → 125s (max 5 minutes)
 
 ---
 
 # AI Processing
 
-The AI support agent analyzes incoming tickets and generates structured information.
+The AI support agent analyzes incoming tickets using specialized tools.
 
-Example:
+## SupportAgent Architecture
+
+```text
+SupportAgent
+     │
+     ├── TicketClassifierTool      → Determines ticket category
+     ├── PriorityAnalyzerTool      → Analyzes priority level
+     ├── SentimentAnalyzerTool     → Detects customer sentiment
+     └── ResponseGeneratorTool     → Generates response suggestion
+```
+
+Each tool implements:
+
+```typescript
+interface AgentTool {
+  name: string;
+  execute(input: AgentToolInput): Promise<AgentToolOutput>;
+}
+```
+
+## AI Output Example
 
 ```json
 {
@@ -294,11 +425,11 @@ Example:
   "priority": "HIGH",
   "sentiment": "FRUSTRATED",
   "confidence": 0.94,
-  "suggestedResponse": "We apologize for the delay..."
+  "suggestedResponse": "We apologize for the delay in your order delivery. We understand this is frustrating and are actively working to resolve this issue. Your order is expected to arrive within the next 24-48 hours."
 }
 ```
 
-The AI provider is isolated behind an application-level abstraction, allowing the underlying provider to be replaced without modifying the ticket domain.
+The AI provider is isolated behind an application-level abstraction (`AIProvider`), allowing the underlying provider to be replaced without modifying the ticket domain.
 
 ---
 
@@ -308,8 +439,8 @@ The AI provider is isolated behind an application-level abstraction, allowing th
 
 Install the following:
 
-- Node.js
-- pnpm
+- Node.js 18+
+- pnpm 9+
 - Docker
 - Docker Compose
 - Supabase project
@@ -319,16 +450,29 @@ Install the following:
 
 ## Environment Variables
 
-Create the required environment configuration:
+Create a `.env` file in the root directory:
 
 ```env
-SUPABASE_URL=
-SUPABASE_ANON_KEY=
-DATABASE_URL=
+# API Configuration
+API_PORT=3001
 
+# Supabase Cloud
+SUPABASE_URL=https://your-project.supabase.co
+SUPABASE_SECRET_KEY=your-secret-key
+
+# RabbitMQ
 BROKER_URL=amqp://guest:guest@localhost:5672
+BROKER_MAX_RETRIES=3
+BROKER_RETRY_BASE_DELAY=5000
 
-OpenCode_API_KEY=
+# AI API
+AI_API_KEY=your-opencode-api-key
+AI_BASE_URL=https://opencode.ai/zen/go/v1
+AI_MODEL=deepseek-v4-flash
+
+# Web Configuration
+WEB_PORT=3000
+NEXT_PUBLIC_API_URL=http://localhost:3001
 ```
 
 Do not commit environment files containing secrets.
@@ -370,6 +514,12 @@ password: guest
 pnpm --filter api dev
 ```
 
+The API is available at:
+
+```text
+http://localhost:3001
+```
+
 ---
 
 ## Start the Web Application
@@ -408,8 +558,40 @@ Response:
 
 ```json
 {
-  "id": "ticket-123",
-  "status": "PROCESSING"
+  "id": "ticket-uuid",
+  "status": "PROCESSING",
+  "customerId": "customer-123",
+  "title": "My order has not arrived",
+  "description": "My order was supposed to arrive five days ago.",
+  "createdAt": "2026-08-22T10:00:00.000Z",
+  "updatedAt": "2026-08-22T10:00:00.000Z"
+}
+```
+
+---
+
+## Get Ticket
+
+```http
+GET /tickets/:id
+```
+
+Response (after AI processing):
+
+```json
+{
+  "id": "ticket-uuid",
+  "status": "ANALYZED",
+  "customerId": "customer-123",
+  "title": "My order has not arrived",
+  "description": "My order was supposed to arrive five days ago.",
+  "priority": "HIGH",
+  "category": "ORDER",
+  "sentiment": "FRUSTRATED",
+  "confidence": 0.94,
+  "suggestedResponse": "We apologize for the delay...",
+  "createdAt": "2026-08-22T10:00:00.000Z",
+  "updatedAt": "2026-08-22T10:00:05.000Z"
 }
 ```
 
@@ -423,14 +605,6 @@ GET /tickets
 
 ---
 
-## Get Ticket
-
-```http
-GET /tickets/:id
-```
-
----
-
 # Development
 
 Run tests:
@@ -439,27 +613,64 @@ Run tests:
 pnpm test
 ```
 
-Run unit tests:
+Run tests in watch mode:
 
 ```bash
-pnpm test:unit
+pnpm test:watch
 ```
 
-Run integration tests:
+Run tests with coverage:
 
 ```bash
-pnpm test:integration
+pnpm test:cov
 ```
 
 ---
 
 # Documentation
 
-Additional architecture documentation is available in:
+Comprehensive documentation is available in the `docs/` directory:
 
-- `docs/architecture.md` — system architecture and application flows
-- `docs/patterns.md` — design patterns and architectural principles
-- `AGENTS.md` — development rules and architectural constraints
+## Architecture & Design
+
+- **[System Overview](docs/system-overview.md)** — Complete system flow, components, and architectural decisions
+- **[Architecture](docs/architecture.md)** — Layered architecture, CQRS, event-driven design
+- **[Design Patterns](docs/patterns.md)** — SOLID principles, patterns used, and refactoring decisions
+- **[Messaging System](docs/messaging.md)** — RabbitMQ implementation, retry mechanism, DLQ
+
+## Development
+
+- **[Development Guide](docs/development-guide.md)** — Setup, running, testing, and troubleshooting
+- **[Development Plan](docs/development-plan.md)** — Roadmap and implementation timeline
+- **[AGENTS.md](AGENTS.md)** — AI agent development rules and constraints
+
+## Quick Links
+
+| Document | Description |
+|----------|-------------|
+| [System Overview](docs/system-overview.md) | Start here to understand the complete system |
+| [Development Guide](docs/development-guide.md) | Setup and run the application locally |
+| [Architecture](docs/architecture.md) | Understand the layered architecture |
+| [Messaging](docs/messaging.md) | Deep dive into RabbitMQ implementation |
+| [Patterns](docs/patterns.md) | Design patterns and best practices |
+
+---
+
+# Design Patterns
+
+This project demonstrates the following design patterns:
+
+- **Clean Architecture**: Separation of concerns across layers
+- **CQRS**: Command Query Responsibility Segregation
+- **Repository Pattern**: Data access abstraction
+- **Adapter Pattern**: External API isolation
+- **Strategy Pattern**: Interchangeable algorithms
+- **Event-Driven Architecture**: Asynchronous decoupling
+- **Dependency Injection**: Loose coupling
+- **Dead Letter Queue**: Resilient message processing
+- **Agent Tool Pattern**: Modular AI capabilities
+
+See `docs/patterns.md` for detailed explanations.
 
 ---
 
