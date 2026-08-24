@@ -1,4 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 import {
   RabbitMQDLQService,
   type DLQMessage,
@@ -15,6 +16,7 @@ export class DLQManagementService {
 
   constructor(
     private readonly dlqService: RabbitMQDLQService,
+    private readonly eventEmitter: EventEmitter2,
     @Inject(LOGGER) private readonly logger: Logger,
   ) {
     const { deadLetterQueue, queue } = TICKET_CREATED_QUEUE;
@@ -57,11 +59,21 @@ export class DLQManagementService {
       messageId,
     });
 
-    return this.dlqService.reprocessMessage(
+    const result = await this.dlqService.reprocessMessage(
       this.defaultDLQ,
       messageId,
       this.defaultTargetQueue,
     );
+
+    if (result) {
+      this.eventEmitter.emit('dlq.change', {
+        ticketId: messageId,
+        action: 'reprocessed',
+        timestamp: new Date().toISOString(),
+      });
+    }
+
+    return result;
   }
 
   async reprocessAll(limit?: number): Promise<{ reprocessed: number }> {
@@ -72,11 +84,21 @@ export class DLQManagementService {
       limit,
     });
 
-    return this.dlqService.reprocessAll(
+    const result = await this.dlqService.reprocessAll(
       this.defaultDLQ,
       this.defaultTargetQueue,
       limit,
     );
+
+    if (result.reprocessed > 0) {
+      this.eventEmitter.emit('dlq.change', {
+        ticketId: 'all',
+        action: 'reprocessed',
+        timestamp: new Date().toISOString(),
+      });
+    }
+
+    return result;
   }
 
   async deleteMessage(messageId: string): Promise<boolean> {
@@ -86,6 +108,16 @@ export class DLQManagementService {
       messageId,
     });
 
-    return this.dlqService.deleteMessage(this.defaultDLQ, messageId);
+    const result = await this.dlqService.deleteMessage(this.defaultDLQ, messageId);
+
+    if (result) {
+      this.eventEmitter.emit('dlq.change', {
+        ticketId: messageId,
+        action: 'deleted',
+        timestamp: new Date().toISOString(),
+      });
+    }
+
+    return result;
   }
 }

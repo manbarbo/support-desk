@@ -160,6 +160,12 @@ export class RabbitMQRetry {
           ticketId,
           timestamp: new Date().toISOString(),
         });
+
+        this.eventEmitter.emit('dlq.change', {
+          ticketId,
+          action: 'added',
+          timestamp: new Date().toISOString(),
+        });
       }
     } catch (err) {
       this.logger.error('Failed to emit ticket.dlq event', {

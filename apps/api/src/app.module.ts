@@ -7,6 +7,7 @@ import { LoggerModule } from './infrastructure/logging/logger.module';
 
 import { TicketsController } from '@presentation/controllers/tickets.controller';
 import { TicketEventsController } from '@presentation/controllers/ticket-events.controller';
+import { DlqEventsController } from '@presentation/controllers/dlq-events.controller';
 import { DLQController } from '@presentation/controllers/admin/dlq.controller';
 import { LoggingInterceptor } from './presentation/interceptors/logging.interceptor';
 
@@ -27,7 +28,12 @@ import { TicketDlqHandler } from '@application/handlers/ticket-dlq.handler';
     InfrastructureModule,
     LoggerModule,
   ],
-  controllers: [TicketsController, TicketEventsController, DLQController],
+  controllers: [
+    TicketsController,
+    TicketEventsController,
+    DlqEventsController,
+    DLQController,
+  ],
   providers: [
     ...COMMAND_HANDLERS,
     ...QUERY_HANDLERS,

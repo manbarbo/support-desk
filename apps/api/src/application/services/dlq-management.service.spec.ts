@@ -1,4 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 import { DLQManagementService } from './dlq-management.service';
 import { RabbitMQDLQService } from '@infrastructure/messaging/rabbitmq/rabbitmq-dlq.service';
 import { LOGGER } from '@infrastructure/logging/logger.interface';
@@ -13,6 +14,7 @@ describe('DLQManagementService', () => {
     reprocessAll: jest.Mock;
     deleteMessage: jest.Mock;
   };
+  let eventEmitter: { emit: jest.Mock };
   let logger: ReturnType<typeof createMockLogger>;
 
   beforeEach(async () => {
@@ -24,12 +26,14 @@ describe('DLQManagementService', () => {
       deleteMessage: jest.fn().mockResolvedValue(true),
     };
 
+    eventEmitter = { emit: jest.fn() };
     logger = createMockLogger();
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         DLQManagementService,
         { provide: RabbitMQDLQService, useValue: mockDLQService },
+        { provide: EventEmitter2, useValue: eventEmitter },
         { provide: LOGGER, useValue: logger },
       ],
     }).compile();
@@ -97,6 +101,18 @@ describe('DLQManagementService', () => {
         'ticket.ai.processing',
       );
     });
+
+    it('should emit dlq.change event on success', async () => {
+      await service.reprocessMessage('msg-1');
+
+      expect(eventEmitter.emit).toHaveBeenCalledWith(
+        'dlq.change',
+        expect.objectContaining({
+          ticketId: 'msg-1',
+          action: 'reprocessed',
+        }),
+      );
+    });
   });
 
   describe('reprocessAll', () => {
@@ -109,6 +125,20 @@ describe('DLQManagementService', () => {
         undefined,
       );
     });
+
+    it('should emit dlq.change event when messages reprocessed', async () => {
+      mockDLQService.reprocessAll.mockResolvedValue({ reprocessed: 5 });
+
+      await service.reprocessAll();
+
+      expect(eventEmitter.emit).toHaveBeenCalledWith(
+        'dlq.change',
+        expect.objectContaining({
+          ticketId: 'all',
+          action: 'reprocessed',
+        }),
+      );
+    });
   });
 
   describe('deleteMessage', () => {
@@ -118,6 +148,18 @@ describe('DLQManagementService', () => {
       expect(mockDLQService.deleteMessage).toHaveBeenCalledWith(
         'ticket.ai.processing.dlq',
         'msg-1',
+      );
+    });
+
+    it('should emit dlq.change event on success', async () => {
+      await service.deleteMessage('msg-1');
+
+      expect(eventEmitter.emit).toHaveBeenCalledWith(
+        'dlq.change',
+        expect.objectContaining({
+          ticketId: 'msg-1',
+          action: 'deleted',
+        }),
       );
     });
   });
