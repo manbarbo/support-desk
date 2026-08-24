@@ -282,15 +282,22 @@ Configuration: 20MB max size, 14-day retention, JSON format.
       - x-last-error: "Error message"
       - x-last-error-at: timestamp
    c. ACKs original message
+   d. Emits 'ticket.dlq' event via EventEmitter2
    ↓
-3. Message stays in DLQ for manual inspection
+3. TicketDlqHandler receives the event:
+   a. Updates ticket status to FAILED in Supabase
+   b. Emits 'ticket.updated' event via TicketEventEmitterService
    ↓
-4. Developer investigates via:
-   - RabbitMQ Management UI
-   - DLQ Management API (future)
+4. TicketEventsController pushes FAILED status to SSE stream
    ↓
-5. After fixing issue, message can be reprocessed
+5. Frontend TicketStream receives event and refreshes
+   ↓
+6. Ticket now shows: Status: FAILED
+   ↓
+7. Message stays in DLQ for admin inspection via /admin/dlq
 ```
+
+**Key**: The DLQ has NO automatic consumer. Failed messages stay in the DLQ for manual inspection. The ticket status is updated through the in-process event system.
 
 ---
 

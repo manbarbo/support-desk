@@ -384,19 +384,44 @@ Consumer
           │ TTL expires
           ▼
     Main Queue (requeued)
+          │
+          └── After 3 retries
+                │
+                ▼
+           DLQ + status = FAILED
+                │
+                ├──► Message stays in DLQ for admin inspection
+                │
+                └──► TicketDlqHandler → repository.update(FAILED) → SSE → Frontend
 ```
 
-After the configured retry limit, the message is routed to the Dead Letter Queue.
-
-This prevents a permanently failing message from continuously blocking the queue.
+After the configured retry limit, the message is routed to the Dead Letter Queue AND the ticket status is updated to FAILED via EventEmitter2.
 
 ---
 
 # DLQ Management
 
-Administrative endpoints allow inspecting and reprocessing failed messages without accessing RabbitMQ directly.
+## Ticket Lifecycle: FAILED + DLQ
 
-## Endpoints
+When a ticket exhausts all retries, two things happen simultaneously:
+
+```text
+RabbitMQRetry
+      │
+      ├──► sendToDLQ() → message stays in DLQ for admin inspection
+      │
+      └──► emitTicketFailed() → EventEmitter2 → TicketDlqHandler
+                                                      │
+                                                      ├──► ticketRepository.update(status: FAILED)
+                                                      │
+                                                      └──► TicketEventEmitterService → SSE → Frontend
+```
+
+**Key principle**: The DLQ has NO automatic consumer. Failed messages stay in the DLQ for manual inspection via the admin panel. The ticket status is updated to FAILED through the in-process event system (EventEmitter2), not by consuming from the DLQ.
+
+## Admin Endpoints
+
+Administrative endpoints for inspecting and reprocessing failed messages:
 
 ```text
 GET    /admin/dlq                       → List messages
@@ -415,11 +440,11 @@ DLQController
 DLQManagementService
       │
       ▼
-RabbitMQDLQService
+RabbitMQDLQService (Management HTTP API)
       │
-      ├── listMessages()     → get + nack (peek)
-      ├── reprocessMessage() → get + publish to main queue + ack
-      └── deleteMessage()    → get + ack (remove)
+      ├── listMessages()     → Management API get (peek)
+      ├── reprocessMessage() → Management API get + publish to main queue
+      └── deleteMessage()    → Management API get + ack (remove)
 ```
 
 ---
@@ -643,6 +668,8 @@ AppModule
 │   ├── TicketsController
 │   ├── TicketEventsController (SSE)
 │   └── DLQController (admin)
+├── Handlers
+│   └── TicketDlqHandler (listens for ticket.dlq events)
 └── Application Services
     ├── TicketEventEmitterService
     └── DLQManagementService
@@ -827,3 +854,4 @@ The following constraints should be preserved:
 10. New infrastructure dependencies should not be introduced without a clear requirement.
 11. Real-time updates must use SSE with in-process EventEmitter2, not direct RabbitMQ-to-frontend connections.
 12. Logging must use the `Logger` interface (`@Inject(LOGGER)`), not Winston directly.
+13. DLQ is for admin inspection only — no automatic consumer processes DLQ messages.

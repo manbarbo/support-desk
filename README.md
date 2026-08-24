@@ -171,8 +171,18 @@ Consumer
           └── After 3 retries
                 │
                 ▼
-           Dead Letter Queue (DLQ)
+           DLQ + status = FAILED
+                │
+                ├──► Message stays in DLQ for admin inspection
+                │
+                └──► TicketDlqHandler → SSE → Frontend updates
 ```
+
+When a ticket exhausts all retries:
+1. The message is sent to the Dead Letter Queue
+2. The ticket status is updated to `FAILED` via in-process EventEmitter2
+3. The frontend receives the update via SSE
+4. The DLQ message remains available for admin inspection at `/admin/dlq`
 
 Configuration:
 

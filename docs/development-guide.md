@@ -426,6 +426,42 @@ All application code uses the `Logger` interface. The only remaining `console.lo
 
 ---
 
+## Testing the DLQ Flow
+
+### Verify DLQ Status Updates
+
+1. Create a ticket that will fail AI processing (e.g., with invalid AI config)
+2. Wait for 3 retries to complete
+3. Verify ticket status changes to FAILED:
+
+```bash
+curl http://localhost:3001/tickets/{ticket-id}
+```
+
+Expected response: `"status": "FAILED"`
+
+### Verify DLQ Messages
+
+```bash
+curl http://localhost:3001/admin/dlq
+```
+
+Expected: 1 message in DLQ with `retryCount: 3`
+
+### Verify Frontend Updates
+
+1. Open the ticket detail page
+2. Wait for AI processing to complete (or fail)
+3. The status should update automatically via SSE (no manual refresh needed)
+
+### Reprocess a DLQ Message
+
+```bash
+curl -X POST http://localhost:3001/admin/dlq/{messageId}/reprocess
+```
+
+---
+
 ## Testing the Frontend
 
 ### 1. Access the Dashboard

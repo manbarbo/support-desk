@@ -8,7 +8,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { CommandBus, QueryBus } from '@nestjs/cqrs';
-import { CreateTicketCommand } from '@application/commands/tickets/create-ticket.command';
+import { CreateTicketCommand } from '@application/commands/tickets/create-ticket/create-ticket.command';
 import { GetTicketQuery } from '@application/queries/tickets/get-ticket.query';
 import { ListTicketsQuery } from '@application/queries/tickets/list-tickets.query';
 import { Ticket } from '@domain/entities/ticket.entity';

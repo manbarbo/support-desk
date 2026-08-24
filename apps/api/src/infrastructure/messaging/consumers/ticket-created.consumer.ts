@@ -2,7 +2,7 @@ import { Inject, Injectable, OnModuleInit } from '@nestjs/common';
 import { CommandBus } from '@nestjs/cqrs';
 import type { ConsumeMessage } from 'amqplib';
 
-import { AnalyzeTicketCommand } from '@application/commands/tickets/analyze-ticket.command';
+import { AnalyzeTicketCommand } from '@application/commands/tickets/analize-ticket/analyze-ticket.command';
 import { RabbitMQConsumer } from '../rabbitmq/rabbitmq.consumer';
 import type { DomainEvent } from '@domain/events/domain-event';
 import {

@@ -103,11 +103,14 @@ export class RabbitMQConsumer {
       const errorMessage =
         retryError instanceof Error ? retryError.message : String(retryError);
 
-      this.logger.error('Failed to handle message failure, falling back to nack', {
-        context: 'RabbitMQConsumer',
-        queue: config.queue,
-        error: errorMessage,
-      });
+      this.logger.error(
+        'Failed to handle message failure, falling back to nack',
+        {
+          context: 'RabbitMQConsumer',
+          queue: config.queue,
+          error: errorMessage,
+        },
+      );
 
       try {
         channel.nack(message, false, false);

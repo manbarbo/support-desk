@@ -5,7 +5,7 @@ import {
   createMockTicketRepository,
   createMockMessagePublisher,
   createMockLogger,
-} from '../../../__mocks__/mocks';
+} from '../../../../__mocks__/mocks';
 
 describe('CreateTicketHandler (Integration)', () => {
   let handler: CreateTicketHandler;
@@ -17,19 +17,29 @@ describe('CreateTicketHandler (Integration)', () => {
     ticketRepository = createMockTicketRepository();
     messagePublisher = createMockMessagePublisher();
     logger = createMockLogger();
-    handler = new CreateTicketHandler(ticketRepository, messagePublisher, logger);
+    handler = new CreateTicketHandler(
+      ticketRepository,
+      messagePublisher,
+      logger,
+    );
   });
 
   beforeEach(() => {
     ticketRepository.create.mockReset();
     messagePublisher.publish.mockReset();
     logger.info.mockReset();
-    ticketRepository.create.mockImplementation((ticket) => Promise.resolve(ticket));
+    ticketRepository.create.mockImplementation((ticket) =>
+      Promise.resolve(ticket),
+    );
   });
 
   it('should create a ticket through the handler', async () => {
     const result = await handler.execute(
-      new CreateTicketCommand('customer-123', 'Order issue', 'My order is late'),
+      new CreateTicketCommand(
+        'customer-123',
+        'Order issue',
+        'My order is late',
+      ),
     );
 
     expect(result).toMatchObject({
@@ -86,7 +96,11 @@ describe('CreateTicketHandler (Integration)', () => {
 
   it('should log ticket creation', async () => {
     await handler.execute(
-      new CreateTicketCommand('customer-123', 'Order issue', 'My order is late'),
+      new CreateTicketCommand(
+        'customer-123',
+        'Order issue',
+        'My order is late',
+      ),
     );
 
     expect(logger.info).toHaveBeenCalledWith(

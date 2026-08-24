@@ -2,7 +2,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { CommandBus, QueryBus } from '@nestjs/cqrs';
 import { NotFoundException } from '@nestjs/common';
 import { TicketsController } from './tickets.controller';
-import { CreateTicketCommand } from '@application/commands/tickets/create-ticket.command';
+import { CreateTicketCommand } from '@application/commands/tickets/create-ticket/create-ticket.command';
 import { GetTicketQuery } from '@application/queries/tickets/get-ticket.query';
 import { ListTicketsQuery } from '@application/queries/tickets/list-tickets.query';
 import { createMockTicket } from '../../__mocks__/mocks';
@@ -106,9 +106,7 @@ describe('TicketsController', () => {
       const result = await controller.getTicket('test-ticket-id-123');
 
       expect(result).toEqual(mockTicket);
-      expect(queryBus.execute).toHaveBeenCalledWith(
-        expect.any(GetTicketQuery),
-      );
+      expect(queryBus.execute).toHaveBeenCalledWith(expect.any(GetTicketQuery));
     });
 
     it('should throw NotFoundException when ticket is not found', async () => {

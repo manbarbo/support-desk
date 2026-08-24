@@ -14,6 +14,7 @@ import { COMMAND_HANDLERS } from '@application/commands';
 import { QUERY_HANDLERS } from '@application/queries';
 import { TicketEventEmitterService } from '@application/services/ticket-event-emitter.service';
 import { DLQManagementService } from '@application/services/dlq-management.service';
+import { TicketDlqHandler } from '@application/handlers/ticket-dlq.handler';
 
 @Module({
   imports: [
@@ -32,6 +33,7 @@ import { DLQManagementService } from '@application/services/dlq-management.servi
     ...QUERY_HANDLERS,
     TicketEventEmitterService,
     DLQManagementService,
+    TicketDlqHandler,
     LoggingInterceptor,
   ],
 })

@@ -10,7 +10,7 @@ import {
   createMockTicketRepository,
   createMockMessagePublisher,
   createMockLogger,
-} from '../../../__mocks__/mocks';
+} from '../../../../__mocks__/mocks';
 
 describe('CreateTicketHandler', () => {
   let handler: CreateTicketHandler;
@@ -51,7 +51,9 @@ describe('CreateTicketHandler', () => {
 
       expect(result.customerId).toBe('customer-123');
       expect(result.title).toBe('My order has not arrived');
-      expect(result.description).toBe('It has been 5 days since I placed my order.');
+      expect(result.description).toBe(
+        'It has been 5 days since I placed my order.',
+      );
       expect(result.status).toBe(TicketStatus.PROCESSING);
       expect(result.id).toBeDefined();
       expect(result.createdAt).toBeInstanceOf(Date);
@@ -97,9 +99,13 @@ describe('CreateTicketHandler', () => {
     });
 
     it('should propagate repository errors', async () => {
-      ticketRepository.create.mockRejectedValue(new Error('Database connection failed'));
+      ticketRepository.create.mockRejectedValue(
+        new Error('Database connection failed'),
+      );
 
-      await expect(handler.execute(command)).rejects.toThrow('Database connection failed');
+      await expect(handler.execute(command)).rejects.toThrow(
+        'Database connection failed',
+      );
     });
 
     it('should generate a unique id for each ticket', async () => {

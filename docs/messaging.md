@@ -496,6 +496,27 @@ export const SUPPORT_EVENTS_EXCHANGE: MessageExchangeConfig = {
 
 ## DLQ Management ✅ Completado
 
+### Ticket Lifecycle: FAILED + DLQ
+
+When a ticket exhausts all retries, two things happen simultaneously:
+
+```text
+RabbitMQRetry.sendToDLQ()
+      │
+      ├──► Message stays in DLQ for admin inspection
+      │
+      └──► EventEmitter2.emit('ticket.dlq')
+                │
+                ▼
+          TicketDlqHandler
+                │
+                ├──► ticketRepository.update(status: FAILED)
+                │
+                └──► TicketEventEmitterService → SSE → Frontend
+```
+
+**Key principle**: The DLQ has NO automatic consumer. Failed messages stay in the DLQ for manual inspection via the admin panel (`/admin/dlq`). The ticket status is updated to FAILED through the in-process event system.
+
 ### API Endpoints
 
 Administrative endpoints are available at `/admin/dlq`:

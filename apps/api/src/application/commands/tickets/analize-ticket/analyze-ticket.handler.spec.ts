@@ -12,7 +12,7 @@ import {
   createMockTicketRepository,
   createMockAIProvider,
   createMockLogger,
-} from '../../../__mocks__/mocks';
+} from '../../../../__mocks__/mocks';
 
 describe('AnalyzeTicketHandler', () => {
   let handler: AnalyzeTicketHandler;
@@ -55,7 +55,9 @@ describe('AnalyzeTicketHandler', () => {
     it('should retrieve the ticket by id', async () => {
       await handler.execute(command);
 
-      expect(ticketRepository.findById).toHaveBeenCalledWith('test-ticket-id-123');
+      expect(ticketRepository.findById).toHaveBeenCalledWith(
+        'test-ticket-id-123',
+      );
     });
 
     it('should throw if ticket is not found', async () => {
@@ -81,21 +83,27 @@ describe('AnalyzeTicketHandler', () => {
 
       await handler.execute(command);
 
-      expect(ticketRepository.updateAnalysis).toHaveBeenCalledWith('test-ticket-id-123', {
-        category: mockAnalysis.category,
-        priority: mockAnalysis.priority,
-        sentiment: mockAnalysis.sentiment,
-        confidence: mockAnalysis.confidence,
-        suggestedResponse: mockAnalysis.suggestedResponse,
-      });
+      expect(ticketRepository.updateAnalysis).toHaveBeenCalledWith(
+        'test-ticket-id-123',
+        {
+          category: mockAnalysis.category,
+          priority: mockAnalysis.priority,
+          sentiment: mockAnalysis.sentiment,
+          confidence: mockAnalysis.confidence,
+          suggestedResponse: mockAnalysis.suggestedResponse,
+        },
+      );
     });
 
     it('should update ticket status to ANALYZED', async () => {
       await handler.execute(command);
 
-      expect(ticketRepository.update).toHaveBeenCalledWith('test-ticket-id-123', {
-        status: TicketStatus.ANALYZED,
-      });
+      expect(ticketRepository.update).toHaveBeenCalledWith(
+        'test-ticket-id-123',
+        {
+          status: TicketStatus.ANALYZED,
+        },
+      );
     });
 
     it('should emit ticket.updated event for SSE', async () => {
@@ -123,9 +131,13 @@ describe('AnalyzeTicketHandler', () => {
     });
 
     it('should propagate repository errors', async () => {
-      ticketRepository.update.mockRejectedValue(new Error('Database write failed'));
+      ticketRepository.update.mockRejectedValue(
+        new Error('Database write failed'),
+      );
 
-      await expect(handler.execute(command)).rejects.toThrow('Database write failed');
+      await expect(handler.execute(command)).rejects.toThrow(
+        'Database write failed',
+      );
     });
 
     it('should log analysis start', async () => {

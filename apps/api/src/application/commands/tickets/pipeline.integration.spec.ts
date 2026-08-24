@@ -1,7 +1,8 @@
-import { CreateTicketHandler } from './create-ticket.handler';
-import { AnalyzeTicketHandler } from './analyze-ticket.handler';
-import { CreateTicketCommand } from './create-ticket.command';
-import { AnalyzeTicketCommand } from './analyze-ticket.command';
+import { CreateTicketHandler } from './create-ticket/create-ticket.handler';
+import { AnalyzeTicketHandler } from './analize-ticket/analyze-ticket.handler';
+import { TicketDlqHandler } from '@application/handlers/ticket-dlq.handler';
+import { CreateTicketCommand } from './create-ticket/create-ticket.command';
+import { AnalyzeTicketCommand } from './analize-ticket/analyze-ticket.command';
 import { GetTicketHandler } from '@application/queries/tickets/get-ticket.handler';
 import { ListTicketsHandler } from '@application/queries/tickets/list-tickets.handler';
 import { GetTicketQuery } from '@application/queries/tickets/get-ticket.query';
@@ -19,6 +20,7 @@ import {
 describe('Ticket Pipeline (Integration)', () => {
   let createHandler: CreateTicketHandler;
   let analyzeHandler: AnalyzeTicketHandler;
+  let dlqHandler: TicketDlqHandler;
   let getHandler: GetTicketHandler;
   let listHandler: ListTicketsHandler;
   let ticketRepository: ReturnType<typeof createMockTicketRepository>;
@@ -34,10 +36,19 @@ describe('Ticket Pipeline (Integration)', () => {
     ticketEventEmitter = { emitTicketUpdated: jest.fn() };
     logger = createMockLogger();
 
-    createHandler = new CreateTicketHandler(ticketRepository, messagePublisher, logger);
+    createHandler = new CreateTicketHandler(
+      ticketRepository,
+      messagePublisher,
+      logger,
+    );
     analyzeHandler = new AnalyzeTicketHandler(
       ticketRepository,
       aiProvider,
+      ticketEventEmitter as any,
+      logger,
+    );
+    dlqHandler = new TicketDlqHandler(
+      ticketRepository,
       ticketEventEmitter as any,
       logger,
     );
@@ -56,12 +67,18 @@ describe('Ticket Pipeline (Integration)', () => {
       ticketRepository.findById.mockResolvedValue(createdTicket);
 
       const ticket = await createHandler.execute(
-        new CreateTicketCommand('customer-1', 'Order issue', 'My order is late'),
+        new CreateTicketCommand(
+          'customer-1',
+          'Order issue',
+          'My order is late',
+        ),
       );
 
       expect(ticket.id).toBe('pipeline-ticket-1');
 
-      const found = await getHandler.execute(new GetTicketQuery('pipeline-ticket-1'));
+      const found = await getHandler.execute(
+        new GetTicketQuery('pipeline-ticket-1'),
+      );
 
       expect(found).toEqual(createdTicket);
     });
@@ -149,6 +166,74 @@ describe('Ticket Pipeline (Integration)', () => {
       );
       expect(finalTicket).toBeDefined();
       expect(finalTicket!.status).toBe(TicketStatus.ANALYZED);
+    });
+  });
+
+  describe('Create → Analyze (fail) → DLQ → FAILED Pipeline', () => {
+    it('should create a ticket, fail analysis, and mark as FAILED via DLQ', async () => {
+      const ticketId = 'dlq-pipeline-1';
+      const createdTicket = createMockTicket({ id: ticketId });
+
+      // Step 1: Create ticket
+      ticketRepository.create.mockResolvedValue(createdTicket);
+
+      const ticket = await createHandler.execute(
+        new CreateTicketCommand('c1', 'Issue', 'Desc'),
+      );
+      expect(ticket.status).toBe(TicketStatus.PROCESSING);
+
+      // Step 2: Simulate DLQ event (as if RabbitMQRetry emitted it)
+      await dlqHandler.handleTicketDlq({
+        ticketId: ticket.id,
+        timestamp: new Date().toISOString(),
+      });
+
+      // Step 3: Verify status is FAILED
+      expect(ticketRepository.update).toHaveBeenCalledWith(ticketId, {
+        status: TicketStatus.FAILED,
+      });
+
+      // Step 4: Verify SSE event was emitted
+      expect(ticketEventEmitter.emitTicketUpdated).toHaveBeenCalledWith(
+        ticketId,
+        TicketStatus.FAILED,
+      );
+    });
+
+    it('should complete the full failure lifecycle: create → DLQ → query FAILED', async () => {
+      const ticketId = 'full-failure-lifecycle-1';
+      const createdTicket = createMockTicket({ id: ticketId });
+
+      // Step 1: Create ticket
+      ticketRepository.create.mockResolvedValue(createdTicket);
+
+      const ticket = await createHandler.execute(
+        new CreateTicketCommand('c1', 'Issue', 'Desc'),
+      );
+      expect(ticket.status).toBe(TicketStatus.PROCESSING);
+
+      // Step 2: DLQ event (updates status to FAILED)
+      ticketRepository.update.mockResolvedValue({
+        ...createdTicket,
+        status: TicketStatus.FAILED,
+      });
+
+      await dlqHandler.handleTicketDlq({
+        ticketId: ticket.id,
+        timestamp: new Date().toISOString(),
+      });
+
+      // Step 3: Query should return FAILED
+      ticketRepository.findById.mockResolvedValue({
+        ...createdTicket,
+        status: TicketStatus.FAILED,
+      });
+
+      const finalTicket = await getHandler.execute(
+        new GetTicketQuery(ticket.id),
+      );
+      expect(finalTicket).toBeDefined();
+      expect(finalTicket!.status).toBe(TicketStatus.FAILED);
     });
   });
 

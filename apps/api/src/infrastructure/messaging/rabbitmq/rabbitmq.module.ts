@@ -28,7 +28,11 @@ export class RabbitMQModule {
         },
       ],
 
-      exports: [RabbitMQConsumer, RabbitMQDLQService, RabbitMQMessagePublisher],
+      exports: [
+        RabbitMQConsumer,
+        RabbitMQDLQService,
+        RabbitMQMessagePublisher,
+      ],
     };
   }
 }

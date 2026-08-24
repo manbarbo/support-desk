@@ -7,7 +7,7 @@ import {
   createMockTicketRepository,
   createMockAIProvider,
   createMockLogger,
-} from '../../../__mocks__/mocks';
+} from '../../../../__mocks__/mocks';
 
 describe('AnalyzeTicketHandler (Integration)', () => {
   let handler: AnalyzeTicketHandler;

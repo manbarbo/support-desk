@@ -1,5 +1,6 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 import type { Channel, ConsumeMessage } from 'amqplib';
 
 import { RabbitMQConnection } from './rabbitmq.connection';
@@ -20,6 +21,7 @@ export class RabbitMQRetry {
   constructor(
     private readonly connection: RabbitMQConnection,
     private readonly configService: ConfigService,
+    private readonly eventEmitter: EventEmitter2,
     @Inject(LOGGER) private readonly logger: Logger,
   ) {
     this.maxRetries = parseInt(
@@ -143,6 +145,28 @@ export class RabbitMQRetry {
         'x-original-queue': config.originalQueue,
       },
     });
+
+    // Emit event to update ticket status to FAILED via SSE
+    this.emitTicketFailed(content);
+  }
+
+  private emitTicketFailed(content: Buffer): void {
+    try {
+      const parsed = JSON.parse(content.toString());
+      const ticketId = parsed.aggregateId ?? parsed.ticketId ?? parsed.id;
+
+      if (ticketId && typeof ticketId === 'string') {
+        this.eventEmitter.emit('ticket.dlq', {
+          ticketId,
+          timestamp: new Date().toISOString(),
+        });
+      }
+    } catch (err) {
+      this.logger.error('Failed to emit ticket.dlq event', {
+        context: 'RabbitMQRetry',
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
   }
 
   private getRetryCount(message: ConsumeMessage): number {
