@@ -181,6 +181,18 @@ BROKER_MAX_RETRIES=3
 BROKER_RETRY_BASE_DELAY=5000
 ```
 
+### DLQ Management
+
+Administrative endpoints for inspecting and reprocessing failed messages:
+
+| Method | Route | Description |
+|--------|-------|-------------|
+| `GET` | `/admin/dlq` | List messages in DLQ |
+| `GET` | `/admin/dlq/:messageId` | Get message details |
+| `POST` | `/admin/dlq/:messageId/reprocess` | Reprocess a message |
+| `POST` | `/admin/dlq/reprocess-all` | Reprocess all messages |
+| `DELETE` | `/admin/dlq/:messageId` | Delete a message |
+
 ---
 
 # Technology Stack

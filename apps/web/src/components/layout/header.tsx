@@ -4,9 +4,17 @@ export function Header() {
   return (
     <header className="border-b border-zinc-800 bg-zinc-900/50 backdrop-blur-sm">
       <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
-        <Link href="/tickets" className="text-xl font-bold">
-          AI Support Desk
-        </Link>
+        <div className="flex items-center gap-6">
+          <Link href="/tickets" className="text-xl font-bold">
+            AI Support Desk
+          </Link>
+          <Link
+            href="/admin/dlq"
+            className="text-sm text-zinc-400 hover:text-zinc-200 transition-colors"
+          >
+            DLQ
+          </Link>
+        </div>
 
         <Link
           href="/tickets/new"
