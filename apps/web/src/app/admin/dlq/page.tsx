@@ -1,7 +1,9 @@
 import { Header } from "@/components/layout/Header";
 import { DLQMessageList } from "@/components/admin/DLQMessageList";
 
-export default function DLQPage() {
+export const dynamic = "force-dynamic";
+
+export default async function DLQPage() {
   return (
     <>
       <Header />

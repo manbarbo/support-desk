@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import type { DLQMessage } from "@/features/dlq/types/dlq.types";
 import {
   reprocessDLQMessage,
@@ -9,48 +10,44 @@ import {
 
 interface DLQMessageCardProps {
   message: DLQMessage;
-  onRefresh: () => void;
 }
 
-export function DLQMessageCard({ message, onRefresh }: DLQMessageCardProps) {
+export function DLQMessageCard({ message }: DLQMessageCardProps) {
+  const router = useRouter();
   const [isExpanded, setIsExpanded] = useState(false);
-  const [isProcessing, setIsProcessing] = useState(false);
+  const [isPending, startTransition] = useTransition();
   const [actionResult, setActionResult] = useState<string | null>(null);
 
-  const handleReprocess = async () => {
-    setIsProcessing(true);
+  const handleReprocess = () => {
     setActionResult(null);
-
-    try {
-      const result = await reprocessDLQMessage(message.id);
-      setActionResult(result.message);
-      onRefresh();
-    } catch (err) {
-      setActionResult(
-        err instanceof Error ? err.message : "Failed to reprocess",
-      );
-    } finally {
-      setIsProcessing(false);
-    }
+    startTransition(async () => {
+      try {
+        const result = await reprocessDLQMessage(message.id);
+        setActionResult(result.message);
+        router.refresh();
+      } catch (err) {
+        setActionResult(
+          err instanceof Error ? err.message : "Failed to reprocess",
+        );
+      }
+    });
   };
 
-  const handleDelete = async () => {
+  const handleDelete = () => {
     if (!confirm("Are you sure you want to delete this message?")) return;
 
-    setIsProcessing(true);
     setActionResult(null);
-
-    try {
-      const result = await deleteDLQMessage(message.id);
-      setActionResult(result.message);
-      onRefresh();
-    } catch (err) {
-      setActionResult(
-        err instanceof Error ? err.message : "Failed to delete",
-      );
-    } finally {
-      setIsProcessing(false);
-    }
+    startTransition(async () => {
+      try {
+        const result = await deleteDLQMessage(message.id);
+        setActionResult(result.message);
+        router.refresh();
+      } catch (err) {
+        setActionResult(
+          err instanceof Error ? err.message : "Failed to delete",
+        );
+      }
+    });
   };
 
   return (
@@ -79,14 +76,14 @@ export function DLQMessageCard({ message, onRefresh }: DLQMessageCardProps) {
           </button>
           <button
             onClick={handleReprocess}
-            disabled={isProcessing}
+            disabled={isPending}
             className="rounded bg-green-600/20 px-2 py-1 text-xs text-green-400 hover:bg-green-600/30 disabled:opacity-50"
           >
-            {isProcessing ? "..." : "Reprocess"}
+            {isPending ? "..." : "Reprocess"}
           </button>
           <button
             onClick={handleDelete}
-            disabled={isProcessing}
+            disabled={isPending}
             className="rounded bg-red-600/20 px-2 py-1 text-xs text-red-400 hover:bg-red-600/30 disabled:opacity-50"
           >
             Delete

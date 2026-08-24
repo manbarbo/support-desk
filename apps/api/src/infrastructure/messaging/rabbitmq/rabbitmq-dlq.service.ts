@@ -1,7 +1,6 @@
 import { Inject, Injectable } from '@nestjs/common';
-import type { GetMessage } from 'amqplib';
+import { ConfigService } from '@nestjs/config';
 
-import { RabbitMQConnection } from './rabbitmq.connection';
 import { LOGGER } from '@infrastructure/logging/logger.interface';
 import type { Logger } from '@infrastructure/logging/logger.interface';
 
@@ -21,40 +20,54 @@ export interface DLQListResult {
   total: number;
 }
 
+interface ManagementMessage {
+  payload_bytes: number;
+  redelivered: boolean;
+  exchange: string;
+  routing_key: string;
+  message_count: number;
+  properties: {
+    delivery_mode: number;
+    headers: Record<string, unknown>;
+    content_type: string;
+    message_id?: string;
+    timestamp?: number;
+  };
+  payload: string;
+  payload_encoding: string;
+}
+
 @Injectable()
 export class RabbitMQDLQService {
+  private readonly managementUrl: string;
+  private readonly credentials: string;
+
   constructor(
-    private readonly connection: RabbitMQConnection,
+    private readonly configService: ConfigService,
     @Inject(LOGGER) private readonly logger: Logger,
-  ) {}
+  ) {
+    const brokerUrl =
+      this.configService.get<string>('BROKER_URL') ??
+      'amqp://guest:guest@localhost:5672';
+    const url = new URL(brokerUrl.replace('amqp://', 'http://'));
+
+    const username = this.configService.get<string>('RABBITMQ_USER') ?? 'guest';
+    const password = this.configService.get<string>('RABBITMQ_PASS') ?? 'guest';
+
+    this.managementUrl = `http://${url.hostname}:15672`;
+    this.credentials = Buffer.from(`${username}:${password}`).toString(
+      'base64',
+    );
+  }
 
   async listMessages(queueName: string, limit = 50): Promise<DLQListResult> {
-    const channel = await this.connection.getChannel();
+    const rawMessages = await this.getFromQueue(
+      queueName,
+      limit,
+      'ack_requeue_true',
+    );
 
-    const messages: DLQMessage[] = [];
-
-    for (let i = 0; i < limit; i++) {
-      const message = await channel.get(queueName, {
-        noAck: false,
-      });
-
-      if (!message) {
-        break;
-      }
-
-      try {
-        messages.push(this.parseMessage(message));
-      } catch (error) {
-        this.logger.error('Failed to parse DLQ message', {
-          context: 'RabbitMQDLQService',
-          queue: queueName,
-          error: error instanceof Error ? error.message : String(error),
-        });
-      } finally {
-        // Reinsert message into the DLQ.
-        channel.nack(message, false, true);
-      }
-    }
+    const messages = rawMessages.map((msg) => this.parseMessage(msg));
 
     this.logger.info('Listed DLQ messages', {
       context: 'RabbitMQDLQService',
@@ -68,47 +81,46 @@ export class RabbitMQDLQService {
     };
   }
 
+  async getMessage(
+    queueName: string,
+    messageId: string,
+  ): Promise<DLQMessage | null> {
+    const rawMessages = await this.getFromQueue(
+      queueName,
+      100,
+      'ack_requeue_true',
+    );
+    const messages = rawMessages.map((msg) => this.parseMessage(msg));
+
+    return messages.find((m) => m.id === messageId) ?? null;
+  }
+
   async reprocessMessage(
     queueName: string,
     messageId: string,
     targetQueue: string,
   ): Promise<boolean> {
-    const channel = await this.connection.getChannel();
+    const rawMessages = await this.getFromQueue(
+      queueName,
+      100,
+      'ack_requeue_false',
+    );
 
-    const message = await channel.get(queueName, {
-      noAck: false,
+    const targetMessage = rawMessages.find((msg) => {
+      const parsed = this.parseMessage(msg);
+      return parsed.id === messageId;
     });
 
-    if (!message) {
-      return false;
-    }
-
-    const parsed = this.parseMessage(message);
-
-    if (parsed.id !== messageId) {
-      channel.nack(message, false, true);
-
-      this.logger.warn('Message ID mismatch', {
+    if (!targetMessage) {
+      this.logger.warn('Message not found for reprocessing', {
         context: 'RabbitMQDLQService',
-        expected: messageId,
-        found: parsed.id,
+        queue: queueName,
+        messageId,
       });
-
       return false;
     }
 
-    channel.sendToQueue(targetQueue, message.content, {
-      persistent: true,
-      contentType: 'application/json',
-      headers: {
-        ...message.properties.headers,
-        'x-reprocessed': true,
-        'x-reprocessed-at': new Date().toISOString(),
-        'x-original-dlq': queueName,
-      },
-    });
-
-    channel.ack(message);
+    await this.publishRaw(targetQueue, targetMessage);
 
     this.logger.info('Message reprocessed', {
       context: 'RabbitMQDLQService',
@@ -125,16 +137,23 @@ export class RabbitMQDLQService {
     targetQueue: string,
     limit = 100,
   ): Promise<{ reprocessed: number }> {
+    const rawMessages = await this.getFromQueue(
+      queueName,
+      limit,
+      'ack_requeue_false',
+    );
     let reprocessed = 0;
 
-    for (let i = 0; i < limit; i++) {
-      const success = await this.reprocessFirst(queueName, targetQueue);
-
-      if (!success) {
-        break;
+    for (const msg of rawMessages) {
+      try {
+        await this.publishRaw(targetQueue, msg);
+        reprocessed++;
+      } catch (error) {
+        this.logger.error('Failed to reprocess message', {
+          context: 'RabbitMQDLQService',
+          error: error instanceof Error ? error.message : String(error),
+        });
       }
-
-      reprocessed++;
     }
 
     this.logger.info('DLQ batch reprocessing completed', {
@@ -149,24 +168,25 @@ export class RabbitMQDLQService {
   }
 
   async deleteMessage(queueName: string, messageId: string): Promise<boolean> {
-    const channel = await this.connection.getChannel();
+    const rawMessages = await this.getFromQueue(
+      queueName,
+      100,
+      'ack_requeue_false',
+    );
 
-    const message = await channel.get(queueName, {
-      noAck: false,
+    const found = rawMessages.some((msg) => {
+      const parsed = this.parseMessage(msg);
+      return parsed.id === messageId;
     });
 
-    if (!message) {
+    if (!found) {
+      this.logger.warn('Message not found for deletion', {
+        context: 'RabbitMQDLQService',
+        queue: queueName,
+        messageId,
+      });
       return false;
     }
-
-    const parsed = this.parseMessage(message);
-
-    if (parsed.id !== messageId) {
-      channel.nack(message, false, true);
-      return false;
-    }
-
-    channel.ack(message);
 
     this.logger.info('Message deleted from DLQ', {
       context: 'RabbitMQDLQService',
@@ -177,55 +197,95 @@ export class RabbitMQDLQService {
     return true;
   }
 
-  private async reprocessFirst(
+  private async getFromQueue(
     queueName: string,
-    targetQueue: string,
-  ): Promise<boolean> {
-    const channel = await this.connection.getChannel();
+    count: number,
+    ackMode: 'ack_requeue_true' | 'ack_requeue_false',
+  ): Promise<ManagementMessage[]> {
+    const encodedQueue = encodeURIComponent(queueName);
+    const url = `${this.managementUrl}/api/queues/%2F/${encodedQueue}/get`;
 
-    const message = await channel.get(queueName, {
-      noAck: false,
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Basic ${this.credentials}`,
+      },
+      body: JSON.stringify({
+        count,
+        ackmode: ackMode,
+        encoding: 'auto',
+      }),
     });
 
-    if (!message) {
-      return false;
+    if (!response.ok) {
+      throw new Error(`RabbitMQ Management API error: ${response.status}`);
     }
 
-    channel.sendToQueue(targetQueue, message.content, {
-      persistent: true,
-      contentType: 'application/json',
-      headers: {
-        ...message.properties.headers,
-        'x-reprocessed': true,
-        'x-reprocessed-at': new Date().toISOString(),
-        'x-original-dlq': queueName,
-      },
-    });
-
-    channel.ack(message);
-
-    return true;
+    return response.json() as Promise<ManagementMessage[]>;
   }
 
-  private parseMessage(message: GetMessage): DLQMessage {
-    const rawContent = message.content.toString();
+  private async publishRaw(
+    queueName: string,
+    message: ManagementMessage,
+  ): Promise<void> {
+    const url = `${this.managementUrl}/api/exchanges/%2F/amq.default/publish`;
 
+    const headers: Record<string, unknown> = message.properties?.headers ?? {};
+
+    const payload =
+      message.payload_encoding === 'base64'
+        ? Buffer.from(message.payload, 'base64').toString()
+        : message.payload;
+
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Basic ${this.credentials}`,
+      },
+      body: JSON.stringify({
+        properties: {
+          delivery_mode: message.properties?.delivery_mode ?? 2,
+          headers: {
+            ...headers,
+            'x-reprocessed': true,
+            'x-reprocessed-at': new Date().toISOString(),
+            'x-original-dlq': queueName,
+          },
+        },
+        routing_key: queueName,
+        payload,
+        payload_encoding: 'string',
+      }),
+    });
+
+    if (!response.ok) {
+      throw new Error(`Failed to publish message: ${response.status}`);
+    }
+  }
+
+  private parseMessage(msg: ManagementMessage): DLQMessage {
     let content: unknown;
 
     try {
-      content = JSON.parse(rawContent);
+      const raw =
+        msg.payload_encoding === 'base64'
+          ? Buffer.from(msg.payload, 'base64').toString()
+          : msg.payload;
+
+      content = JSON.parse(raw);
     } catch {
-      content = rawContent;
+      content = msg.payload;
     }
 
-    const headers = this.getHeaders(message);
-    const messageId = this.getMessageId(message);
+    const headers: Record<string, unknown> = msg.properties?.headers ?? {};
 
-    const id = messageId ?? rawContent.slice(0, 8);
+    const id = this.extractMessageId(content, msg.properties?.message_id);
 
     const timestamp =
-      typeof message.properties.timestamp === 'number'
-        ? new Date(message.properties.timestamp).toISOString()
+      typeof msg.properties?.timestamp === 'number'
+        ? new Date(msg.properties.timestamp).toISOString()
         : new Date().toISOString();
 
     return {
@@ -240,38 +300,16 @@ export class RabbitMQDLQService {
     };
   }
 
-  private getMessageId(message: GetMessage): string | undefined {
-    const messageId: unknown = message.properties.messageId;
-
-    return typeof messageId === 'string' ? messageId : undefined;
-  }
-
-  private getHeaders(message: GetMessage): Record<string, unknown> {
-    const headers: unknown = message.properties.headers;
-
-    return this.isRecord(headers) ? headers : {};
-  }
-
-  private isRecord(value: unknown): value is Record<string, unknown> {
-    return typeof value === 'object' && value !== null && !Array.isArray(value);
-  }
-
   private getHeaderNumber(
     headers: Record<string, unknown>,
     key: string,
   ): number {
     const value = headers[key];
-
-    if (typeof value === 'number') {
-      return value;
-    }
-
+    if (typeof value === 'number') return value;
     if (typeof value === 'string') {
       const parsed = Number(value);
-
       return Number.isFinite(parsed) ? parsed : 0;
     }
-
     return 0;
   }
 
@@ -280,15 +318,31 @@ export class RabbitMQDLQService {
     key: string,
   ): string {
     const value = headers[key];
-
-    if (typeof value === 'string') {
-      return value;
-    }
-
-    if (Buffer.isBuffer(value)) {
-      return value.toString();
-    }
-
+    if (typeof value === 'string') return value;
+    if (Buffer.isBuffer(value)) return value.toString();
     return '';
+  }
+
+  private extractMessageId(content: unknown, messageId?: string): string {
+    if (messageId) {
+      return messageId;
+    }
+
+    if (typeof content === 'object' && content !== null) {
+      const obj = content as Record<string, unknown>;
+
+      const candidates = [obj.aggregateId, obj.eventId, obj.ticketId];
+
+      for (const candidate of candidates) {
+        if (typeof candidate === 'string' && candidate.length > 0) {
+          return candidate;
+        }
+      }
+    }
+
+    const serialized =
+      typeof content === 'string' ? content : JSON.stringify(content);
+
+    return serialized.slice(0, 8);
   }
 }
