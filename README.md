@@ -203,6 +203,18 @@ Administrative endpoints for inspecting and reprocessing failed messages:
 | `POST` | `/admin/dlq/reprocess-all` | Reprocess all messages |
 | `DELETE` | `/admin/dlq/:messageId` | Delete a message |
 
+### DLQ SSE Stream
+
+Real-time updates for the admin panel:
+
+| Endpoint | Description |
+|----------|-------------|
+| `GET /events/dlq/stream` | SSE stream for DLQ changes |
+
+Events: `added`, `reprocessed`, `deleted`
+| `POST` | `/admin/dlq/reprocess-all` | Reprocess all messages |
+| `DELETE` | `/admin/dlq/:messageId` | Delete a message |
+
 ---
 
 # Technology Stack

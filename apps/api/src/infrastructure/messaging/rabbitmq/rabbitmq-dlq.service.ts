@@ -100,13 +100,14 @@ export class RabbitMQDLQService {
     messageId: string,
     targetQueue: string,
   ): Promise<boolean> {
-    const rawMessages = await this.getFromQueue(
+    // Step 1: Peek at messages (requeue) to find the target
+    const peekMessages = await this.getFromQueue(
       queueName,
       100,
-      'ack_requeue_false',
+      'ack_requeue_true',
     );
 
-    const targetMessage = rawMessages.find((msg) => {
+    const targetMessage = peekMessages.find((msg) => {
       const parsed = this.parseMessage(msg);
       return parsed.id === messageId;
     });
@@ -120,7 +121,37 @@ export class RabbitMQDLQService {
       return false;
     }
 
-    await this.publishRaw(targetQueue, targetMessage);
+    // Step 2: Consume all messages to get the raw target
+    const consumedMessages = await this.getFromQueue(
+      queueName,
+      100,
+      'ack_requeue_false',
+    );
+
+    const rawMessage = consumedMessages.find((msg) => {
+      const parsed = this.parseMessage(msg);
+      return parsed.id === messageId;
+    });
+
+    if (!rawMessage) {
+      this.logger.warn('Raw message not found for reprocessing', {
+        context: 'RabbitMQDLQService',
+        queue: queueName,
+        messageId,
+      });
+      return false;
+    }
+
+    // Step 3: Publish target to the main queue
+    await this.publishRaw(targetQueue, rawMessage);
+
+    // Step 4: Requeue all other messages that were consumed
+    for (const msg of consumedMessages) {
+      const parsed = this.parseMessage(msg);
+      if (parsed.id !== messageId) {
+        await this.publishRaw(queueName, msg);
+      }
+    }
 
     this.logger.info('Message reprocessed', {
       context: 'RabbitMQDLQService',
@@ -168,13 +199,14 @@ export class RabbitMQDLQService {
   }
 
   async deleteMessage(queueName: string, messageId: string): Promise<boolean> {
-    const rawMessages = await this.getFromQueue(
+    // Step 1: Peek at messages (requeue) to verify the message exists
+    const peekMessages = await this.getFromQueue(
       queueName,
       100,
-      'ack_requeue_false',
+      'ack_requeue_true',
     );
 
-    const found = rawMessages.some((msg) => {
+    const found = peekMessages.some((msg) => {
       const parsed = this.parseMessage(msg);
       return parsed.id === messageId;
     });
@@ -186,6 +218,21 @@ export class RabbitMQDLQService {
         messageId,
       });
       return false;
+    }
+
+    // Step 2: Consume all messages to find and delete the target
+    const consumedMessages = await this.getFromQueue(
+      queueName,
+      100,
+      'ack_requeue_false',
+    );
+
+    // Requeue messages that are NOT the target
+    for (const msg of consumedMessages) {
+      const parsed = this.parseMessage(msg);
+      if (parsed.id !== messageId) {
+        await this.publishRaw(queueName, msg);
+      }
     }
 
     this.logger.info('Message deleted from DLQ', {

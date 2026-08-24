@@ -419,6 +419,27 @@ RabbitMQRetry
 
 **Key principle**: The DLQ has NO automatic consumer. Failed messages stay in the DLQ for manual inspection via the admin panel. The ticket status is updated to FAILED through the in-process event system (EventEmitter2), not by consuming from the DLQ.
 
+## DLQ SSE Stream
+
+The admin panel receives real-time updates when DLQ changes occur:
+
+```text
+RabbitMQRetry.sendToDLQ()
+    │
+    └──► EventEmitter2.emit('dlq.change')
+                │
+                ▼
+      DlqEventsController (GET /events/dlq/stream)
+                │
+                ▼
+      Frontend DlqStream → router.refresh()
+```
+
+Events are emitted when:
+- A message is added to DLQ (`action: 'added'`)
+- A message is reprocessed (`action: 'reprocessed'`)
+- A message is deleted (`action: 'deleted'`)
+
 ## Admin Endpoints
 
 Administrative endpoints for inspecting and reprocessing failed messages:
@@ -431,6 +452,16 @@ POST   /admin/dlq/reprocess-all         → Reprocess all messages
 DELETE /admin/dlq/:messageId            → Delete a message
 ```
 
+## DLQ Operations Safety
+
+The DLQ operations use a **peek + consume** pattern to avoid losing messages:
+
+1. **Peek** (`ackmode: ack_requeue_true`) — reads messages without consuming them
+2. **Consume** (`ackmode: ack_requeue_false`) — consumes messages to get raw data
+3. **Requeue** — puts back messages that were not the target
+
+This ensures that reprocessing or deleting one message does not affect other messages in the queue.
+
 ## Architecture
 
 ```text
@@ -439,12 +470,19 @@ DLQController
       ▼
 DLQManagementService
       │
-      ▼
-RabbitMQDLQService (Management HTTP API)
+      ├──► RabbitMQDLQService (Management HTTP API)
+      │         │
+      │         ├── listMessages()     → Management API get (peek)
+      │         ├── reprocessMessage() → peek → consume target → publish to main queue → requeue others
+      │         └── deleteMessage()    → peek → consume target → requeue others
       │
-      ├── listMessages()     → Management API get (peek)
-      ├── reprocessMessage() → Management API get + publish to main queue
-      └── deleteMessage()    → Management API get + ack (remove)
+      └──► EventEmitter2.emit('dlq.change')
+                │
+                ▼
+          DlqEventsController (SSE)
+                │
+                ▼
+          Frontend DlqStream → router.refresh()
 ```
 
 ---
