@@ -51,6 +51,7 @@ Read these documents:
 ### [System Overview](system-overview.md)
 
 **What it covers:**
+
 - Complete system flow from ticket creation to AI analysis
 - Component interactions and data flow
 - Error handling and retry mechanisms
@@ -58,11 +59,13 @@ Read these documents:
 - Future enhancements
 
 **When to read:**
+
 - First time understanding the system
 - Onboarding new team members
 - Planning system improvements
 
 **Key sections:**
+
 - System Components
 - Complete System Flow
 - Error Handling and Retry Flow
@@ -74,6 +77,7 @@ Read these documents:
 ### [Architecture](architecture.md)
 
 **What it covers:**
+
 - Clean Architecture layers (Domain, Application, Infrastructure, Presentation)
 - CQRS implementation
 - Event-driven architecture
@@ -82,11 +86,13 @@ Read these documents:
 - Frontend architecture boundary
 
 **When to read:**
+
 - Understanding code organization
 - Adding new features
 - Refactoring existing code
 
 **Key sections:**
+
 - Layers (Domain, Application, Infrastructure, Presentation)
 - CQRS (Commands and Queries)
 - Event-Driven Architecture
@@ -99,6 +105,7 @@ Read these documents:
 ### [Frontend Architecture](frontend-architecture.md)
 
 **What it covers:**
+
 - Next.js App Router folder structure
 - Separation of pages, components, features, lib, types, and config
 - Data fetching patterns (Server Components vs Client Components)
@@ -107,11 +114,13 @@ Read these documents:
 - Migration path from flat scaffold to target structure
 
 **When to read:**
+
 - Setting up or refactoring the frontend
 - Adding new frontend features
 - Understanding where to place new files
 
 **Key sections:**
+
 - Directory Structure
 - Layer Responsibilities
 - Naming Conventions
@@ -123,6 +132,7 @@ Read these documents:
 ### [Design Patterns](patterns.md)
 
 **What it covers:**
+
 - SOLID principles with examples
 - Repository Pattern
 - Adapter Pattern
@@ -132,11 +142,13 @@ Read these documents:
 - Refactoring decisions
 
 **When to read:**
+
 - Understanding design decisions
 - Learning best practices
 - Preparing for technical interviews
 
 **Key sections:**
+
 - SOLID Principles
 - Repository Pattern
 - Adapter Pattern
@@ -145,9 +157,40 @@ Read these documents:
 
 ---
 
+### [Historia Arquitectónica](historia-arquitectonica.md)
+
+**Qué cubre:**
+
+- Abstracción (AIProvider, TicketRepository, MessagePublisher, AgentTool)
+- Polimorfismo y Adapter Pattern
+- Strategy y Factory Patterns
+- Singleton vía DI container
+- CQRS y Event-Driven Architecture
+- RabbitMQ y Resiliencia (Retry + DLQ)
+- AI (SupportAgent)
+- Persistencia (Supabase/PostgreSQL)
+- Frontend (Next.js)
+
+**Cuándo leerlo:**
+
+- Para entender cómo cada patrón se aplica en el proyecto
+- Para preparar una presentación técnica
+- Para defender decisiones arquitectónicas
+
+**Secciones clave:**
+
+- Abstracción (Interfaces)
+- Adapter Pattern
+- CQRS
+- Event-Driven Architecture
+- Resiliencia (Retry + DLQ)
+
+---
+
 ### [Messaging System](messaging.md)
 
 **What it covers:**
+
 - RabbitMQ architecture and components
 - Message flow and lifecycle
 - Retry mechanism with exponential backoff
@@ -156,12 +199,14 @@ Read these documents:
 - Troubleshooting
 
 **When to read:**
+
 - Understanding async processing
 - Debugging message issues
 - Implementing new consumers
 - Configuring retry behavior
 
 **Key sections:**
+
 - Architecture
 - Components (Connection, Topology, Publisher, Consumer, Retry)
 - Message Flow Examples
@@ -176,6 +221,7 @@ Read these documents:
 ### [Development Guide](development-guide.md)
 
 **What it covers:**
+
 - Prerequisites and setup
 - Environment configuration
 - Running the application
@@ -186,12 +232,14 @@ Read these documents:
 - Database management
 
 **When to read:**
+
 - Setting up the project locally
 - Running tests
 - Debugging issues
 - Learning development workflows
 
 **Key sections:**
+
 - Prerequisites
 - Project Setup
 - Running the Application
@@ -205,17 +253,20 @@ Read these documents:
 ### [Development Plan](development-plan.md)
 
 **What it covers:**
+
 - Day-by-day development roadmap
 - Feature priorities (P0, P1, P2)
 - Implementation timeline
 - Technical milestones
 
 **When to read:**
+
 - Understanding project scope
 - Planning future work
 - Tracking progress
 
 **Key sections:**
+
 - Day 1: Foundation + Backend Core
 - Day 2: OpenCode + Agent + Async Processing
 - Day 3: Frontend + Testing + Polish
@@ -228,28 +279,28 @@ Read these documents:
 
 ### By Task
 
-| Task | Document | Section |
-|------|----------|---------|
-| Set up locally | [Development Guide](development-guide.md) | Prerequisites, Project Setup |
-| Run the app | [Development Guide](development-guide.md) | Running the Application |
-| Test API | [Development Guide](development-guide.md) | Testing the Application |
-| Debug messages | [Messaging](messaging.md) | Troubleshooting |
-| Understand flow | [System Overview](system-overview.md) | Complete System Flow |
-| Add new feature | [Architecture](architecture.md) | Layers, Module Organization |
-| Learn patterns | [Patterns](patterns.md) | All sections |
-| Configure retry | [Messaging](messaging.md) | Configuration |
-| Monitor system | [Messaging](messaging.md) | Monitoring and Observability |
+| Task            | Document                                  | Section                      |
+| --------------- | ----------------------------------------- | ---------------------------- |
+| Set up locally  | [Development Guide](development-guide.md) | Prerequisites, Project Setup |
+| Run the app     | [Development Guide](development-guide.md) | Running the Application      |
+| Test API        | [Development Guide](development-guide.md) | Testing the Application      |
+| Debug messages  | [Messaging](messaging.md)                 | Troubleshooting              |
+| Understand flow | [System Overview](system-overview.md)     | Complete System Flow         |
+| Add new feature | [Architecture](architecture.md)           | Layers, Module Organization  |
+| Learn patterns  | [Patterns](patterns.md)                   | All sections                 |
+| Configure retry | [Messaging](messaging.md)                 | Configuration                |
+| Monitor system  | [Messaging](messaging.md)                 | Monitoring and Observability |
 
 ### By Role
 
-| Role | Start With | Then Read |
-|------|------------|-----------|
-| **New Developer** | Development Guide | System Overview, Architecture |
-| **Tech Lead** | System Overview | Architecture, Patterns |
-| **Backend Dev** | Architecture | Messaging, Patterns |
-| **Frontend Dev** | Frontend Architecture | Development Guide |
-| **DevOps** | Messaging | Development Guide |
-| **Product Manager** | System Overview | Development Plan |
+| Role                | Start With            | Then Read                     |
+| ------------------- | --------------------- | ----------------------------- |
+| **New Developer**   | Development Guide     | System Overview, Architecture |
+| **Tech Lead**       | System Overview       | Architecture, Patterns        |
+| **Backend Dev**     | Architecture          | Messaging, Patterns           |
+| **Frontend Dev**    | Frontend Architecture | Development Guide             |
+| **DevOps**          | Messaging             | Development Guide             |
+| **Product Manager** | System Overview       | Development Plan              |
 
 ---
 
@@ -307,15 +358,15 @@ If you can't find what you're looking for:
 
 ## 📊 Documentation Status
 
-| Document | Status | Last Updated |
-|----------|--------|--------------|
-| System Overview | ✅ Complete | 2026-08-23 |
-| Architecture | ✅ Complete | 2026-08-23 |
-| Frontend Architecture | ✅ Complete | 2026-08-23 |
-| Patterns | ✅ Complete | 2026-08-23 |
-| Messaging | ✅ Complete | 2026-08-23 |
-| Development Guide | ✅ Complete | 2026-08-23 |
-| Development Plan | ✅ Complete | 2026-08-23 |
+| Document              | Status      | Last Updated |
+| --------------------- | ----------- | ------------ |
+| System Overview       | ✅ Complete | 2026-08-23   |
+| Architecture          | ✅ Complete | 2026-08-23   |
+| Frontend Architecture | ✅ Complete | 2026-08-23   |
+| Patterns              | ✅ Complete | 2026-08-23   |
+| Messaging             | ✅ Complete | 2026-08-23   |
+| Development Guide     | ✅ Complete | 2026-08-23   |
+| Development Plan      | ✅ Complete | 2026-08-23   |
 
 ---
 
